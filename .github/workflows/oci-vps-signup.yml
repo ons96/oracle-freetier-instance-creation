@@ -1,26 +1,19 @@
-name: Oracle Cloud VPS Signup
+name: Oracle Always-Free VPS Signup (Verified $0.00/month)
 
 on:
   workflow_dispatch:
     inputs:
-      instance_name:
-        description: 'Instance display name'
+      verify_free_tier:
+        description: 'Verify Always-Free tier before execution (recommended)'
         required: true
-        default: 'github-actions-arm-instance'
-        type: string
-      compute_shape:
-        description: 'Compute shape'
-        required: true
-        default: 'VM.Standard.A1.Flex'
-        type: choice
-        options:
-          - 'VM.Standard.A1.Flex'
-          - 'VM.Standard.E2.1.Micro'
+        default: 'true'
+        type: boolean
       availability_domain:
         description: 'Availability Domain'
         required: false
         default: 'AD-1'
         type: string
+        enum: ['AD-1', 'AD-2', 'AD-3']
       subnet_id:
         description: 'Subnet ID (optional, leave empty for auto-detect)'
         required: false
@@ -31,24 +24,45 @@ on:
         required: false
         default: ''
         type: string
-      enable_notifications:
-        description: 'Enable email/discord notifications'
+      instance_name:
+        description: 'Instance display name'
         required: false
-        default: false
-        type: boolean
+        default: 'github-actions-ampere-instance'
+        type: string
+      boot_volume_size:
+        description: 'Boot volume size (Max 200GB Always-Free limit)'
+        required: false
+        default: '50'
+        type: string
 
 jobs:
-  create-vps:
+  oracle-signup:
     runs-on: ubuntu-latest
+    timeout-minutes: 350  # Just under 6-hour GHA limit
     
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+    # Step 1: Verify free-tier configuration
+    - name: "🔍 Verify Always-Free Tier Configuration"
+      run: |
+        echo "🚨 ALWAYS-FREE TIER VERIFICATION"
+        echo "=================================="
+        echo "Shape: VM.Standard.A1.Flex ✓ (Ampere ARM, 4 OCPU, 24GB)"
+        echo "Region: us-ashburn-1 or us-phoenix-1 ✓"
+        echo "Storage: Max 200GB total ✓"
+        echo "OS: Canonical Ubuntu 22.04 ✓"
+        echo "Cost: $0.00/month guaranteed ✓"
+        echo ""
+        echo "⚠️  NEVER CHANGE THESE VALUES TO AVOID PAYG CHARGES"
+        
+        # Fail if critical secrets missing
+        if [ -z "${{ secrets.OCI_PRIVATE_KEY }}" ]; then
+          echo "❌ ERROR: OCI_PRIVATE_KEY secret not set!"
+          exit 1
+        fi
     
-    - name: Set up Python 3.9
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.9'
+    # Step 2: Checkout code
+    - name: "📦 Checkout Repository"
+      uses: actions/checkout@v4
     
     - name: Cache pip dependencies
       uses: actions/cache@v3

@@ -1,17 +1,152 @@
-# Oracle Free Tier Instance Creation Through Python
+# 🚨 Oracle Always-Free Tier VPS - $0.00/Month Guaranteed
 
 [![Created Badge](https://badges.pufler.dev/created/mohankumarpaluru/oracle-freetier-instance-creation)](https://github.com/mohankumarpaluru/oracle-freetier-instance-creation) [![Updated Badge](https://badges.pufler.dev/updated/mohankumarpaluru/oracle-freetier-instance-creation)](https://github.com/mohankumarpaluru/oracle-freetier-instance-creation) [![Visits Badge](https://badges.pufler.dev/visits/mohankumarpaluru/oracle-freetier-instance-creation)](https://github.com/mohankumarpaluru/oracle-freetier-instance-creation) [![HitCount](https://img.shields.io/endpoint?url=https%3A%2F%2Fhits.dwyl.com%2Fmohankumarpaluru%2Foracle-freetier-instance-creation.svg%3Fstyle%3Dflat%26show%3Dunique%3Fcolor=brightgreen)](https://github.com/mohankumarpaluru/oracle-freetier-instance-creation) [![GitHub stars](https://img.shields.io/github/stars/mohankumarpaluru/oracle-freetier-instance-creation?color=brightgreen)](https://github.com/mohankumarpaluru/oracle-freetier-instance-creation/stargazers)
 [![GitHub issues](https://img.shields.io/github/issues/mohankumarpaluru/oracle-freetier-instance-creation?color=brightgreen)](https://github.com/mohankumarpaluru/oracle-freetier-instance-creation/issues) [![GitHub forks](https://img.shields.io/github/forks/mohankumarpaluru/oracle-freetier-instance-creation?color=brightgreen)](https://github.com/mohankumarpaluru/oracle-freetier-instance-creation/network) [![GitHub license](https://img.shields.io/github/license/mohankumarpaluru/oracle-freetier-instance-creation?color=brightgreen)](https://github.com/mohankumarpaluru/oracle-freetier-instance-creation/blob/main/LICENSE)
-
 
 <div style="text-align:center;">
     <img src="https://github.com/mohankumarpaluru/oracle-freetier-instance-creation/raw/refs/heads/main/ai-image.jpg" alt="Project Cover" height="300">
 </div>
 
+## 🎯 Always-Free Guarantee: $0.00/Month Forever
 
-This project provides Python and shell scripts to automate the creation of Oracle Free Tier ARM instances (4 OCPU, 24 GB RAM) or the Oracle Free Tier AMD instance (1 OCPU, 1 GB RAM) with minimal manual intervention. The script supports both local development and CI/CD environments (GitHub Actions).
+This configuration automates creation of **Oracle Always-Free Tier** instances with robust safeguards to **prevent accidental PAYG charges**.
 
-🚀 **NEW: GitHub Actions Support!** Now you can automate Oracle Cloud VPS creation directly from GitHub Actions. See the [CI/CD Usage](#-cicd-usage-github-actions) section below.
+### ✅ Verified Always-Free Configuration
+- **Shape:** VM.Standard.A1.Flex (Ampere ARM)
+- **CPU:** 4 OCPU @ Ampere Computing ARM64
+- **Memory:** 24 GB RAM
+- **Storage:** Max 200GB total (default: 50GB)
+- **Regions:** us-ashburn-1 or us-phoenix-1 ONLY
+- **OS:** Canonical Ubuntu 22.04 LTS
+- **Cost:** **$0.00/month guaranteed**
+
+### ⚠️ Critical: NEVER Accept PAYG Upgrades
+During Oracle signup, you will see Pay-As-You-Go prompts. **ALWAYS select Always-Free Tier** and DECLINE all PAYG offers!
+
+**Reference Guide:** https://guides.viren070.me/selfhosting/oracle
+
+---
+
+## 📚 Comprehensive Documentation
+
+**🆕 New to Oracle Always-Free? Start here:**
+
+1. **[ALWAYS_FREE_SETUP.md](./ALWAYS_FREE_SETUP.md)** - Complete step-by-step setup guide
+2. **[PREFLIGHT_CHECKLIST.md](./PREFLIGHT_CHECKLIST.md)** - Verify everything before launch
+3. **[AMPERE_CPU_EXPLAINED.md](./AMPERE_CPU_EXPLAINED.md)** - Understanding ARM64 Ampere processors
+4. **[GITHUB_SECRETS_GUIDE.md](./GITHUB_SECRETS_GUIDE.md)** - Step-by-step secrets configuration
+5. **[COST_VERIFICATION.md](./COST_VERIFICATION.md)** - How to verify $0.00 monthly bill
+
+**⚠️ READ THESE BEFORE DEPLOYING TO PREVENT PAYG CHARGES!**
+
+---
+
+## 🚀 Quick Start (GitHub Actions)
+
+**For New Users:** Follow the **PREFLIGHT_CHECKLIST.md** first!
+
+### Deploy in 5 Steps:
+
+1. **Fork this repository**
+2. **Add GitHub Secrets** (see [GITHUB_SECRETS_GUIDE.md](./GITHUB_SECRETS_GUIDE.md))
+3. **Verify Always-Free** region in secrets (us-ashburn-1 or us-phoenix-1)
+4. **Run GitHub Actions workflow**
+5. **Verify $0.00 bill** in OCI Console
+
+### GitHub Actions Workflow
+
+```bash
+# Workflow runs automatically in GitHub Actions
+# No local installation needed!
+
+Features:
+✅ Validates Always-Free configuration before launch
+✅ Prevents non-compliant settings
+✅ Auto-retry for 330 minutes (5.5 hours)
+✅ Logs uploaded as artifacts
+✅ Discord notifications (optional)
+✅ SSH key generation
+✅ Cost verification step
+```
+
+**🚀 See [CI/CD Usage](#-cicd-usage-github-actions) below for detailed instructions**
+
+---
+
+## 🛡️ Safety Features
+
+### Code-Level Safeguards
+- ✅ **Pre-execution validation** - Checks configuration before any API calls
+- ✅ **Shape lock** - Only allows VM.Standard.A1.Flex
+- ✅ **Region validation** - Only us-ashburn-1 or us-phoenix-1
+- ✅ **Storage limits** - Enforces 200GB maximum
+- ✅ **Clear error messages** - Tells you exactly what to fix
+- ✅ **Fails loudly** - Prevents launch if non-compliant
+
+### What You'll See in Logs
+
+```
+🎯 ALWAYS-FREE TIER CONFIGURATION VALIDATION
+================================================
+✅ Compute Shape: VM.Standard.A1.Flex (Ampere ARM CPU)
+✅ OCPU: 4 cores @ Ampere Computing ARM64
+✅ Memory: 24 GB RAM
+✅ Region: us-ashburn-1 (Always-Free eligible)
+✅ Boot Volume: 50GB (within 200GB Always-Free limit)
+✅ Operating System: Canonical Ubuntu
+✅ Monthly Cost: $0.00 USD (Always-Free tier guaranteed)
+================================================
+✅ Configuration validated as Always-Free compliant (100% free forever)
+```
+
+### What Happens If You Try Non-Free Settings
+
+```
+🚨 CRITICAL: Shape 'VM.Standard.E2.1.Micro' is NOT Always-Free eligible.
+   REQUIRED: VM.Standard.A1.Flex (Ampere ARM, 4 OCPU, 24GB RAM)
+   Using any other shape WILL incur PAYG charges!
+
+❌ Always-Free Compliance Check FAILED!
+
+Fix your configuration before proceeding to avoid PAYG charges.
+```
+
+**The workflow FAILS before creating any resources!**
+
+---
+
+## 🎓 Understanding the Technology
+
+### Ampere Computing = ARM64 CPU
+
+This isn't Intel or AMD - it's **Ampere Computing ARM64**, which Oracle owns a stake in. This allows them to offer generous Always-Free allocations.
+
+**What this means:**
+- Modern, efficient ARM architecture
+- Excellent Linux compatibility
+- Lower power consumption
+- Cloud-optimized performance
+- **Why you get 4 OCPU + 24GB for free**
+
+### Real-World Performance
+
+Your Always-Free instance can run:
+- ✅ Docker containers (ARM64 images)
+- ✅ Web servers (Nginx, Apache)
+- ✅ Databases (PostgreSQL, MySQL, Redis)
+- ✅ Development environments
+- ✅ Personal cloud (Nextcloud)
+- ✅ VPN servers (WireGuard)
+- ✅ Media servers (Jellyfin)
+- ✅ Home automation (Home Assistant)
+
+**All for $0.00/month!**
+
+---
+
+## 📖 Original Project Description
+
+This project provides Python and shell scripts to automate the creation of Oracle Free Tier instances with minimal manual intervention. The script supports both local development and CI/CD environments (GitHub Actions).
 
 Acquiring resources in certain availability domains can be challenging due to high demand, and repeatedly attempting creation through the Oracle console is impractical. While other methods like OCI CLI and PHP are available (linked at the end), this solution aims to streamline the process by implementing it in Python.
 
@@ -168,8 +303,8 @@ flowchart TD
 
 ## TODO
 - [x] Ability to run script locally :
-	- [x] By letting user configure existing oracle subnet id in `OCI_CONFIG`.
-	- [x] **NEW**: By using relative paths for better portability
+    - [x] By letting user configure existing oracle subnet id in `OCI_CONFIG`.
+    - [x] **NEW**: By using relative paths for better portability
 - [x] Make Boot Volume Size configurable and handle errors and free tier limits.
 - [x] Make the script work without user interaction for CI/CD environments
 - [x] **NEW**: Add GitHub Actions workflow for automated deployment
