@@ -166,6 +166,48 @@ flowchart TD
     class N,O error;
 ```
 
+## 🤖 Git Workflow for AI Agents
+
+This project implements a **safe Git feature branch workflow** specifically designed for AI agentic coding to prevent irreversible changes to the main branch.
+
+### 🔒 Safety Features
+- **Main Branch Protection**: Direct commits to main are disabled via pull requests only
+- **Feature Branches**: All development happens on isolated feature branches
+- **Pull Request Reviews**: Changes require review before merging
+- **Atomic Commits**: Small, focused commits for easy rollback if needed
+
+### 🚀 AI Development Workflow
+
+1. **Create Feature Branch**: Always branch from main for new features/fixes
+   ```bash
+   git checkout -b feature/your-feature-name
+   ```
+
+2. **Make Changes Safely**: Develop on the feature branch without affecting main
+
+3. **Test Thoroughly**: Verify changes work correctly before proceeding
+
+4. **Create Pull Request**: Submit changes for review (even self-review for AI)
+
+5. **Merge After Review**: Only merge after confirming changes are safe
+
+6. **Clean Up**: Delete feature branch after successful merge
+
+### 🛡️ Protection Rules
+- ✅ Feature branches encouraged for all changes
+- ✅ Small, incremental commits preferred
+- ❌ Direct commits to main branch blocked
+- ❌ Large, risky changes without review
+
+### 💡 Best Practices for AI Coding
+- **Start with documentation improvements** (like this section!)
+- **Make one logical change per branch**
+- **Test changes thoroughly before committing**
+- **Write clear commit messages**
+- **Keep feature branches short-lived**
+
+---
+
 ## TODO
 - [x] Ability to run script locally :
 	- [x] By letting user configure existing oracle subnet id in `OCI_CONFIG`.
