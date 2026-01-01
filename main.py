@@ -17,10 +17,29 @@ from dotenv import load_dotenv
 import requests
 
 # Load environment variables from .env file
-load_dotenv('oci.env')
+load_dotenv(os.path.join(os.getcwd(), 'oci.env'))
 
 ARM_SHAPE = "VM.Standard.A1.Flex"
 E2_MICRO_SHAPE = "VM.Standard.E2.1.Micro"
+
+# Validate required environment variables for CI/CD
+required_vars = ['OCI_CONFIG']
+missing_vars = [var for var in required_vars if not os.getenv(var)]
+
+if missing_vars and (os.getenv('CI') or os.getenv('GITHUB_ACTIONS')):
+    print(f"Missing required environment variables for CI/CD: {missing_vars}")
+    print("Please set these variables in your GitHub Actions secrets")
+    sys.exit(1)
+
+# Check if we're in CI/CD environment
+is_ci_cd = os.getenv('CI') or os.getenv('GITHUB_ACTIONS')
+
+if is_ci_cd:
+    logging.info("Running in CI/CD environment")
+    # Ensure we don't try to send notifications in CI/CD unless explicitly enabled
+    if os.getenv('CI_NOTIFICATIONS', 'false').lower() != 'true':
+        NOTIFY_EMAIL = False
+        DISCORD_WEBHOOK = ""
 
 # Access loaded environment variables and strip white spaces
 OCI_CONFIG = os.getenv("OCI_CONFIG", "").strip()
@@ -63,25 +82,34 @@ try:
         raise ValueError("oci_config has spaces in values which is not acceptable")        
 
 except configparser.Error as e:
-    with open("ERROR_IN_CONFIG.log", "w", encoding='utf-8') as file:
+    error_log_path = os.path.join(os.getcwd(), "ERROR_IN_CONFIG.log")
+    with open(error_log_path, "w", encoding='utf-8') as file:
         file.write(str(e))
 
     print(f"Error reading the configuration file: {e}")
+    # In CI/CD, we should exit on configuration errors
+    if os.getenv('CI') or os.getenv('GITHUB_ACTIONS'):
+        sys.exit(1)
 
 # Set up logging
+log_file = os.path.join(os.getcwd(), "setup_and_info.log")
 logging.basicConfig(
-    filename="setup_and_info.log",
+    filename=log_file,
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
 )
 logging_step5 = logging.getLogger("launch_instance")
 logging_step5.setLevel(logging.INFO)
-fh = logging.FileHandler("launch_instance.log")
+fh = logging.FileHandler(os.path.join(os.getcwd(), "launch_instance.log"))
 fh.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
 logging_step5.addHandler(fh)
 
 # Set up OCI Config and Clients
-oci_config_path = OCI_CONFIG if OCI_CONFIG else "~/.oci/config"
+if OCI_CONFIG:
+    # Use absolute path from environment or relative to current directory
+    oci_config_path = OCI_CONFIG if os.path.isabs(OCI_CONFIG) else os.path.join(os.getcwd(), OCI_CONFIG)
+else:
+    oci_config_path = os.path.expanduser("~/.oci/config")
 config = oci.config.from_file(oci_config_path)
 iam_client = oci.identity.IdentityClient(config)
 network_client = oci.core.VirtualNetworkClient(config)
@@ -169,7 +197,8 @@ def generate_html_body(instance):
         str: HTML body for the email.
     """
     # Replace placeholders with instance details
-    with open('email_content.html', 'r', encoding='utf-8') as email_temp:
+    email_template_path = os.path.join(os.getcwd(), 'email_content.html')
+    with open(email_template_path, 'r', encoding='utf-8') as email_temp:
         html_template = email_temp.read()
     html_body = html_template.replace('&lt;INSTANCE_ID&gt;', instance.id)
     html_body = html_body.replace('&lt;DISPLAY_NAME&gt;', instance.display_name)
@@ -197,7 +226,8 @@ def create_instance_details_file_and_notify(instance, shape=ARM_SHAPE):
     micro_body = 'TWo Micro Instances are already existing and running'
     arm_body = '\n'.join(details)
     body = arm_body if shape == ARM_SHAPE else micro_body
-    write_into_file('INSTANCE_CREATED', body)
+    instance_file_path = os.path.join(os.getcwd(), 'INSTANCE_CREATED')
+    write_into_file(instance_file_path, body)
 
     # Generate HTML body for email
     html_body = generate_html_body(instance)
@@ -222,7 +252,8 @@ def notify_on_failure(failure_msg):
         " And include the following error message to help us investigate and resolve the problem:\n\n"
         f"{failure_msg}"
     )
-    write_into_file('UNHANDLED_ERROR.log', mail_body)
+    error_log_path = os.path.join(os.getcwd(), 'UNHANDLED_ERROR.log')
+    write_into_file(error_log_path, mail_body)
     if NOTIFY_EMAIL:
         send_email('OCI INSTANCE CREATION SCRIPT: FAILED DUE TO AN ERROR', mail_body, EMAIL, EMAIL_PASSWORD)
 
@@ -349,7 +380,8 @@ def read_or_generate_ssh_public_key(public_key_file: Union[str, Path]):
     if not public_key_path.is_file():
         logging.info("SSH key doesn't exist... Generating SSH Key Pair")
         public_key_path.parent.mkdir(parents=True, exist_ok=True)
-        private_key_path = public_key_path.with_name(f"{public_key_path.stem}_private")
+        # Use relative path for private key in current directory
+        private_key_path = Path(os.getcwd()) / f"{public_key_path.stem}_private"
         generate_ssh_key_pair(public_key_path, private_key_path)
 
     with open(public_key_path, "r", encoding="utf-8") as pub_key_file:
@@ -408,7 +440,8 @@ def launch_instance():
         )
         shortened_images = [{key: json.loads(str(image))[key] for key in IMAGE_LIST_KEYS
                              } for image in images]
-        write_into_file('images_list.json', json.dumps(shortened_images, indent=2))
+        images_file_path = os.path.join(os.getcwd(), 'images_list.json')
+        write_into_file(images_file_path, json.dumps(shortened_images, indent=2))
         oci_image_id = next(image.id for image in images if
                             image.operating_system == OPERATING_SYSTEM and
                             image.operating_system_version == OS_VERSION)

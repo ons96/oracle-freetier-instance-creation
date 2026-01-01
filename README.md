@@ -9,9 +9,13 @@
 </div>
 
 
-This project provides Python and shell scripts to automate the creation of Oracle Free Tier ARM instances (4 OCPU, 24 GB RAM) or the Oracle Free Tier AMD instance (1 OCPU, 1 GB RAM) with minimal manual intervention. Acquiring resources in certain availability domains can be challenging due to high demand, and repeatedly attempting creation through the Oracle console is impractical. While other methods like OCI CLI and PHP are available (linked at the end), this solution aims to streamline the process by implementing it in Python.
+This project provides Python and shell scripts to automate the creation of Oracle Free Tier ARM instances (4 OCPU, 24 GB RAM) or the Oracle Free Tier AMD instance (1 OCPU, 1 GB RAM) with minimal manual intervention. The script supports both local development and CI/CD environments (GitHub Actions).
 
-The script attempts to create an instance every 60 seconds or as per the `REQUEST_WAIT_TIME_SECS` variable specified in the `oci.env` file until the instance is successfully created. Upon completion, a file named `INSTANCE_CREATED` is generated in the project directory, containing details about the newly created instance. Additionally, you can configure the script to send a Gmail notification upon instance creation.
+🚀 **NEW: GitHub Actions Support!** Now you can automate Oracle Cloud VPS creation directly from GitHub Actions. See the [CI/CD Usage](#-cicd-usage-github-actions) section below.
+
+Acquiring resources in certain availability domains can be challenging due to high demand, and repeatedly attempting creation through the Oracle console is impractical. While other methods like OCI CLI and PHP are available (linked at the end), this solution aims to streamline the process by implementing it in Python.
+
+The script attempts to create an instance every 60 seconds or as per the `REQUEST_WAIT_TIME_SECS` variable specified in the `oci.env` file until the instance is successfully created. Upon completion, a file named `INSTANCE_CREATED` is generated in the project directory, containing details about the newly created instance. Additionally, you can configure the script to send Gmail or Discord notifications upon instance creation.
 
 **Note: This script doesn't configure a public IP by default; you need to configure it post the creation of the instance from the console. (Planning on automating it soon)**
 
@@ -20,10 +24,13 @@ In short, this script is another way to bypass the "Out of host capacity" or "Ou
 ## Features
 - Single file needs to be run after basic setup
 - Configurable wait time, OCPU, RAM, DISPLAY_NAME
-- Gmail notification
+- Gmail and Discord notifications
 - SSH keys for ARM instances can be automatically created
 - OS configuration based on Image ID or OS and version
 - Compute shape configuration
+- **CI/CD support with GitHub Actions**
+- **Relative paths for better portability**
+- **Environment variable-based configuration for security**
 
 ## Pre-Requisites
 - **VM.Standard.E2.1.Micro Instance**: The script is designed for a Ubuntu environment, and you need an existing subnet ID for ARM instance creation. Create an always-free `VM.Standard.E2.1.Micro` instance with Ubuntu 22.04. This instance can be deleted after the ARM instance creation. (Not required if an existing OCI_SUBNET_ID is defined in oci.env file)
@@ -33,6 +40,8 @@ In short, this script is another way to bypass the "Out of host capacity" or "Ou
 - **Gmail App Passkey (Optional)**: If you want to receive an email notification after instance creation and have two-factor authentication enabled, follow this [Google App's Password Generation link](https://graph.org/Google-App-Passwords-Generation-12-11) to create a custom app and obtain the passkey.
 
 ## Setup
+
+### Local Development
 
 1. SSH into the VM.Standard.E2.1.Micro Ubuntu machine, clone this repository, and navigate to the project directory. Change the permissions of `setup_init.sh` to make it executable.
     ```bash
@@ -48,7 +57,7 @@ In short, this script is another way to bypass the "Out of host capacity" or "Ou
 
 5. Edit the **`oci.env`** file and fill in the necessary details. Refer [below for more information](https://github.com/mohankumarpaluru/oracle-freetier-instance-creation#environment-variables) `oci.env` fields.
 
-	You can also use run the `setup_env.sh` script to interactively generate the `oci.env` file with your desired configuration:
+    You can also use run the `setup_env.sh` script to interactively generate the `oci.env` file with your desired configuration:
 
     ```bash
     ./setup_env.sh
@@ -58,6 +67,45 @@ In short, this script is another way to bypass the "Out of host capacity" or "Ou
 
     > [!Note]
     > If an `oci.env` file already exists, the script will create a backup of the current file as `oci.env.bak`.
+
+### CI/CD Usage (GitHub Actions)
+
+For automated deployment using GitHub Actions:
+
+1. **Fork/Clone this repository** to your GitHub account
+
+2. **Set up GitHub Secrets** in your repository:
+   - Go to `Settings` > `Secrets and variables` > `Actions`
+   - Add the following secrets:
+     ```
+     OCI_USER_ID=ocid1.user.oc1..your_user_id
+     OCI_TENANCY_ID=ocid1.tenancy.oc1..your_tenancy_id
+     OCI_FINGERPRINT=aa:bb:cc:dd:ee:ff:gg:hh:ii:jj:kk:ll:mm:nn:oo:pp
+     OCI_PRIVATE_KEY=-----BEGIN PRIVATE KEY-----
+     YOUR_PRIVATE_KEY_CONTENT
+     -----END PRIVATE KEY-----
+     OCI_REGION=us-ashburn-1
+     NOTIFY_EMAIL=your-email@gmail.com (optional)
+     EMAIL_PASSWORD=your-app-password (optional)
+     DISCORD_WEBHOOK=https://discord.com/api/webhooks/... (optional)
+     ```
+
+3. **Run the workflow**:
+   - Go to the `Actions` tab in your repository
+   - Select "Oracle Cloud VPS Signup" workflow
+   - Click "Run workflow"
+   - Fill in the parameters (instance name, shape, etc.)
+   - Click "Run workflow" to start
+
+4. **Monitor the execution**:
+   - The workflow will show real-time logs
+   - Check the `instance-details` artifact for results
+   - Artifacts include instance details, logs, and SSH keys
+
+For CI/CD environments, you can also use the setup script:
+```bash
+./setup_ci.sh
+```
 
 
 ## Run
@@ -119,13 +167,18 @@ flowchart TD
 ```
 
 ## TODO
-- [ ] Ability to run script locally :
+- [x] Ability to run script locally :
 	- [x] By letting user configure existing oracle subnet id in `OCI_CONFIG`.
-	- [ ] By creating VPC and subnet from Script if running locally (need to handle the free tier limits).
-- [ ] Make Boot Volume Size configurable and handle errors and free tier limits.
+	- [x] **NEW**: By using relative paths for better portability
+- [x] Make Boot Volume Size configurable and handle errors and free tier limits.
+- [x] Make the script work without user interaction for CI/CD environments
+- [x] **NEW**: Add GitHub Actions workflow for automated deployment
+- [x] **NEW**: Improve security with environment variable-based configuration
+- [x] **NEW**: Make the script CI/CD compatible with proper error handling
 - [ ] Assign a public IP through the script and handle free tier limits.
-- [ ] Make the script interavtive by displaying a list of images and OS that can be used before launching an instance to select.
-- [x] Redirect logs to a Telegram Bot.
+- [ ] Make the script interactive by displaying a list of images and OS that can be used before launching an instance to select.
+- [x] Redirect logs to a Discord Bot.
+- [x] Add Telegram Bot notifications.
 
 ## Environment Variables
 **Required Fields:**

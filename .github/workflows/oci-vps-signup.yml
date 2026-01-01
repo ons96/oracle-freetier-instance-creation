@@ -1,0 +1,182 @@
+name: Oracle Cloud VPS Signup
+
+on:
+  workflow_dispatch:
+    inputs:
+      instance_name:
+        description: 'Instance display name'
+        required: true
+        default: 'github-actions-arm-instance'
+        type: string
+      compute_shape:
+        description: 'Compute shape'
+        required: true
+        default: 'VM.Standard.A1.Flex'
+        type: choice
+        options:
+          - 'VM.Standard.A1.Flex'
+          - 'VM.Standard.E2.1.Micro'
+      availability_domain:
+        description: 'Availability Domain'
+        required: false
+        default: 'AD-1'
+        type: string
+      subnet_id:
+        description: 'Subnet ID (optional, leave empty for auto-detect)'
+        required: false
+        default: ''
+        type: string
+      image_id:
+        description: 'Custom Image ID (optional, leave empty to auto-detect)'
+        required: false
+        default: ''
+        type: string
+      enable_notifications:
+        description: 'Enable email/discord notifications'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  create-vps:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Set up Python 3.9
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+    
+    - name: Cache pip dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Create OCI config directory
+      run: mkdir -p ~/.oci
+    
+    - name: Setup OCI configuration
+      env:
+        OCI_USER_ID: ${{ secrets.OCI_USER_ID }}
+        OCI_TENANCY_ID: ${{ secrets.OCI_TENANCY_ID }}
+        OCI_FINGERPRINT: ${{ secrets.OCI_FINGERPRINT }}
+        OCI_PRIVATE_KEY: ${{ secrets.OCI_PRIVATE_KEY }}
+        OCI_REGION: ${{ secrets.OCI_REGION }}
+      run: |
+        cat > ~/.oci/config << EOF
+        [DEFAULT]
+        user=$OCI_USER_ID
+        fingerprint=$OCI_FINGERPRINT
+        key_file=~/.oci/oci_private_key.pem
+        tenancy=$OCI_TENANCY_ID
+        region=$OCI_REGION
+        EOF
+        
+        echo "$OCI_PRIVATE_KEY" > ~/.oci/oci_private_key.pem
+        chmod 600 ~/.oci/oci_private_key.pem
+    
+    - name: Setup environment variables
+      env:
+        INSTANCE_NAME: ${{ github.event.inputs.instance_name || 'github-actions-arm-instance' }}
+        COMPUTE_SHAPE: ${{ github.event.inputs.compute_shape || 'VM.Standard.A1.Flex' }}
+        AVAILABILITY_DOMAIN: ${{ github.event.inputs.availability_domain || 'AD-1' }}
+        SUBNET_ID: ${{ github.event.inputs.subnet_id || '' }}
+        IMAGE_ID: ${{ github.event.inputs.image_id || '' }}
+        ENABLE_NOTIFICATIONS: ${{ github.event.inputs.enable_notifications || 'false' }}
+        OCI_CONFIG: ~/.oci/config
+        OCT_FREE_AD: ${{ github.event.inputs.availability_domain || 'AD-1' }}
+        DISPLAY_NAME: ${{ github.event.inputs.instance_name || 'github-actions-arm-instance' }}
+        OCI_COMPUTE_SHAPE: ${{ github.event.inputs.compute_shape || 'VM.Standard.A1.Flex' }}
+        OCI_SUBNET_ID: ${{ github.event.inputs.subnet_id || '' }}
+        OCI_IMAGE_ID: ${{ github.event.inputs.image_id || '' }}
+        NOTIFY_EMAIL: ${{ github.event.inputs.enable_notifications || 'false' }}
+        EMAIL: ${{ secrets.NOTIFY_EMAIL }}
+        EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+        DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+        CI: true
+        GITHUB_ACTIONS: true
+      run: |
+        echo "INSTANCE_NAME=$INSTANCE_NAME" >> $GITHUB_ENV
+        echo "COMPUTE_SHAPE=$COMPUTE_SHAPE" >> $GITHUB_ENV
+        echo "Setting up CI environment variables"
+    
+    - name: Verify OCI configuration
+      run: |
+        echo "Checking OCI configuration..."
+        ls -la ~/.oci/
+        echo "OCI config content:"
+        cat ~/.oci/config
+    
+    - name: Create instance with OCI
+      env:
+        OCI_CONFIG: ~/.oci/config
+        OCT_FREE_AD: ${{ github.event.inputs.availability_domain || 'AD-1' }}
+        DISPLAY_NAME: ${{ github.event.inputs.instance_name || 'github-actions-arm-instance' }}
+        OCI_COMPUTE_SHAPE: ${{ github.event.inputs.compute_shape || 'VM.Standard.A1.Flex' }}
+        OCI_SUBNET_ID: ${{ github.event.inputs.subnet_id || '' }}
+        OCI_IMAGE_ID: ${{ github.event.inputs.image_id || '' }}
+        OPERATING_SYSTEM: "Canonical Ubuntu"
+        OS_VERSION: "22.04"
+        ASSIGN_PUBLIC_IP: "false"
+        BOOT_VOLUME_SIZE: "50"
+        SECOND_MICRO_INSTANCE: "false"
+        REQUEST_WAIT_TIME_SECS: "60"
+        SSH_AUTHORIZED_KEYS_FILE: "id_rsa.pub"
+        NOTIFY_EMAIL: ${{ github.event.inputs.enable_notifications || 'false' }}
+        EMAIL: ${{ secrets.NOTIFY_EMAIL }}
+        EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+        DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+        CI: true
+        GITHUB_ACTIONS: true
+      run: |
+        echo "Starting OCI instance creation..."
+        python main.py
+    
+    - name: Upload instance details
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: instance-details
+        path: |
+          INSTANCE_CREATED
+          setup_and_info.log
+          launch_instance.log
+          ERROR_IN_CONFIG.log
+          UNHANDLED_ERROR.log
+          images_list.json
+          id_rsa.pub
+        retention-days: 30
+    
+    - name: Display results
+      if: always()
+      run: |
+        echo "=== Instance Creation Results ==="
+        if [ -f "INSTANCE_CREATED" ]; then
+          echo "✅ Instance created successfully!"
+          cat INSTANCE_CREATED
+        else
+          echo "❌ Instance creation failed or in progress"
+        fi
+        
+        echo ""
+        echo "=== Log Files ==="
+        if [ -f "setup_and_info.log" ]; then
+          echo "Setup log:"
+          tail -20 setup_and_info.log
+        fi
+        
+        if [ -f "launch_instance.log" ]; then
+          echo "Launch log:"
+          tail -20 launch_instance.log
+        fi

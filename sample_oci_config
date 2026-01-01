@@ -1,6 +1,26 @@
+# Sample OCI Configuration File
+# Copy this file to 'oci_config' and fill in your actual OCI credentials
+
 [DEFAULT]
-user=ocid1.user.oc1..aaaaaaaa
-fingerprint=2e:c0:...
-tenancy=ocid1.tenancy.oc1..aaaaaaaapoaaa
-region=ap-hyderabad-1
-key_file=/home/ubuntu/oracle-freetier-instance-creation/oci_api_private_key.pem
+# Your OCI user OCID
+# Get this from: Profile -> My Profile -> Copy OCID
+user=ocid1.user.oc1..exampleuserid123456789
+
+# Your OCI tenancy OCID  
+# Get this from: Administration -> Tenancy Details -> Tenancy OCID
+tenancy=ocid1.tenancy.oc1..exampletenancyid123456789
+
+# Region where you want to create instances
+# Common regions: us-ashburn-1, us-phoenix-1, eu-frankfurt-1, ap-tokyo-1
+region=us-ashburn-1
+
+# Your API signing key fingerprint
+# Get this from: Profile -> API Keys -> Add Key -> Copy fingerprint
+fingerprint=aa:bb:cc:dd:ee:ff:gg:hh:ii:jj:kk:ll:mm:nn:oo:pp
+
+# Path to your private key file
+# Generate with: openssl genrsa -out ~/.oci/oci_private_key.pem 2048
+key_file=~/.oci/oci_private_key.pem
+
+# For enhanced security, you can also specify:
+# pass_phrase=your_key_passphrase
