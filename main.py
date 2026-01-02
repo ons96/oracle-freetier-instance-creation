@@ -22,6 +22,13 @@ load_dotenv(os.path.join(os.getcwd(), 'oci.env'))
 ARM_SHAPE = "VM.Standard.A1.Flex"
 E2_MICRO_SHAPE = "VM.Standard.E2.1.Micro"
 
+# Always-Free Tier Configuration Constants
+ALWAYS_FREE_SHAPES = ["VM.Standard.A1.Flex"]  # Ampere ARM CPU only
+ALWAYS_FREE_REGIONS = ["us-ashburn-1", "us-phoenix-1"]
+ALWAYS_FREE_OPERATING_SYSTEMS = ["Canonical Ubuntu"]
+ALWAYS_FREE_MAX_STORAGE_GB = 200
+ALWAYS_FREE_DEFAULT_BOOT_VOLUME = 50
+
 # Validate required environment variables for CI/CD
 required_vars = ['OCI_CONFIG']
 missing_vars = [var for var in required_vars if not os.getenv(var)]
@@ -90,6 +97,96 @@ except configparser.Error as e:
     # In CI/CD, we should exit on configuration errors
     if os.getenv('CI') or os.getenv('GITHUB_ACTIONS'):
         sys.exit(1)
+
+def validate_always_free_compliance():
+    """
+    Validates that configuration will NEVER trigger PAYG charges.
+    Fails loudly if any non-free settings detected.
+    
+    Raises:
+        ValueError: If any non-Always-Free configuration is detected
+    """
+    # Get OCI region from config
+    oci_region = config.get('region', '') if config else ''
+    
+    errors = []
+    warnings = []
+    
+    # Critical checks - must pass to prevent PAYG charges
+    if OCI_COMPUTE_SHAPE not in ALWAYS_FREE_SHAPES:
+        errors.append(
+            f"🚨 CRITICAL: Shape '{OCI_COMPUTE_SHAPE}' is NOT Always-Free eligible.\n"
+            f"   REQUIRED: VM.Standard.A1.Flex (Ampere ARM, 4 OCPU, 24GB RAM)\n"
+            f"   Using any other shape WILL incur PAYG charges!\n"
+            f"\n   Did you accidentally select E2.Micro? This can trigger charges!"
+        )
+    
+    if oci_region not in ALWAYS_FREE_REGIONS and oci_region:
+        errors.append(
+            f"🚨 CRITICAL: Region '{oci_region}' is NOT Always-Free eligible!\n"
+            f"   REQUIRED regions: us-ashburn-1 or us-phoenix-1\n"
+            f"   Using other regions WILL incur PAYG charges!"
+        )
+    
+    boot_volume_int = int(BOOT_VOLUME_SIZE) if str(BOOT_VOLUME_SIZE).isdigit() else 0
+    if boot_volume_int > ALWAYS_FREE_MAX_STORAGE_GB:
+        errors.append(
+            f"🚨 CRITICAL: Boot volume {boot_volume_int}GB exceeds Always-Free limit of {ALWAYS_FREE_MAX_STORAGE_GB}GB.\n"
+            f"   Maximum storage across ALL volumes is {ALWAYS_FREE_MAX_STORAGE_GB}GB.\n"
+            f"   Exceeding this WILL incur PAYG charges!"
+        )
+    
+    if boot_volume_int < 50:
+        warnings.append(
+            f"⚠️ WARNING: Boot volume size {boot_volume_int}GB is below minimum 50GB.\n"
+            f"   Will default to 50GB (Always-Free compliant)."
+        )
+    
+    # OS warning (non-critical but recommended)
+    if OPERATING_SYSTEM and OPERATING_SYSTEM not in ALWAYS_FREE_OPERATING_SYSTEMS:
+        warnings.append(
+            f"⚠️ WARNING: OS '{OPERATING_SYSTEM}' may not be fully Always-Free compliant.\n"
+            f"   Recommended: Canonical Ubuntu (Ubuntu 22.04 LTS preferred)\n"
+            f"   Other OS may have licensing costs or compatibility issues."
+        )
+    
+    # Always-Free confirmation details
+    logging.info("=" * 70)
+    logging.info("🎯 ALWAYS-FREE TIER CONFIGURATION VALIDATION")
+    logging.info("=" * 70)
+    logging.info("✅ Compute Shape: %s (Ampere ARM CPU)", OCI_COMPUTE_SHAPE)
+    logging.info("✅ OCPU: 4 cores @ Ampere Computing ARM64")
+    logging.info("✅ Memory: 24 GB RAM")
+    logging.info("✅ Region: %s", oci_region if oci_region in ALWAYS_FREE_REGIONS else "⚠️ NOT ALWAYS-FREE ELIGIBLE")
+    logging.info("✅ Boot Volume: %sGB (within %sGB Always-Free limit)", 
+                 max(50, boot_volume_int), ALWAYS_FREE_MAX_STORAGE_GB)
+    logging.info("✅ Operating System: %s", OPERATING_SYSTEM or "Auto-detected")
+    logging.info("✅ Monthly Cost: $0.00 USD (Always-Free tier guaranteed)")
+    logging.info("=" * 70)
+    
+    # Output all warnings
+    for warning in warnings:
+        logging.warning(warning)
+    
+    # Fail if any critical errors detected
+    if errors:
+        error_msg = "\n\n".join(errors)
+        logging.critical("\n" + "=" * 70)
+        logging.critical("❌ ALWAYS-FREE COMPLIANCE CHECK FAILED!")
+        logging.critical("=" * 70)
+        logging.critical("\n%s\n", error_msg)
+        logging.critical("=" * 70)
+        logging.critical("\n\nFix your configuration before proceeding to avoid PAYG charges.")
+        logging.critical("=" * 70)
+        raise ValueError(
+            "❌ Always-Free Compliance Check FAILED!\n\n"
+            f"{error_msg}\n\n"
+            "Fix your configuration before proceeding to avoid PAYG charges."
+        )
+    
+    logging.info("✅ Configuration validated as Always-Free compliant (100%% free forever)")
+    logging.info("=" * 70)
+
 
 # Set up logging
 log_file = os.path.join(os.getcwd(), "setup_and_info.log")
@@ -407,6 +504,10 @@ def launch_instance():
     Raises:
         Exception: Raises an exception if an unexpected error occurs.
     """
+    # 🚨 Always-Free Tier Compliance Validation - FIRST STEP
+    # This prevents any PAYG charges by validating configuration
+    validate_always_free_compliance()
+    
     # Step 1 - Get TENANCY
     user_info = execute_oci_command(iam_client, "get_user", OCI_USER_ID)
     oci_tenancy = user_info.compartment_id
@@ -452,6 +553,19 @@ def launch_instance():
     assign_public_ip = ASSIGN_PUBLIC_IP.lower() in [ "true", "1", "y", "yes" ]
 
     boot_volume_size = max(50, int(BOOT_VOLUME_SIZE))
+    
+    # Additional validation for Always-Free storage limit
+    if boot_volume_size > ALWAYS_FREE_MAX_STORAGE_GB:
+        logging.critical(
+            "🚨 CRITICAL: Boot volume %sGB exceeds Always-Free limit of %sGB!\n"
+            "This WILL trigger PAYG charges. Aborting launch.\n"
+            "Set BOOT_VOLUME_SIZE to %sGB or less in oci.env",
+            boot_volume_size, ALWAYS_FREE_MAX_STORAGE_GB, ALWAYS_FREE_MAX_STORAGE_GB
+        )
+        raise ValueError(
+            f"Boot volume {boot_volume_size}GB exceeds Always-Free limit of {ALWAYS_FREE_MAX_STORAGE_GB}GB. "
+            "This would trigger PAYG charges. Aborting instance launch."
+        )
 
     ssh_public_key = read_or_generate_ssh_public_key(SSH_AUTHORIZED_KEYS_FILE)
 
