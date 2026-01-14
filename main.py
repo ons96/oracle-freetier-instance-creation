@@ -24,7 +24,9 @@ E2_MICRO_SHAPE = "VM.Standard.E2.1.Micro"
 
 # Always-Free Tier Configuration Constants
 ALWAYS_FREE_SHAPES = ["VM.Standard.A1.Flex"]  # Ampere ARM CPU only
-ALWAYS_FREE_REGIONS = ["us-ashburn-1", "us-phoenix-1"]
+# NOTE: Oracle Always-Free eligibility can vary by tenancy/region over time.
+# This list is intentionally restrictive to reduce the risk of PAYG charges.
+ALWAYS_FREE_REGIONS = ["us-ashburn-1", "us-phoenix-1", "ca-toronto-1"]
 ALWAYS_FREE_OPERATING_SYSTEMS = ["Canonical Ubuntu"]
 ALWAYS_FREE_MAX_STORAGE_GB = 200
 ALWAYS_FREE_DEFAULT_BOOT_VOLUME = 50
@@ -53,6 +55,10 @@ OCI_CONFIG = os.getenv("OCI_CONFIG", "").strip()
 OCT_FREE_AD = os.getenv("OCT_FREE_AD", "").strip()
 DISPLAY_NAME = os.getenv("DISPLAY_NAME", "").strip()
 WAIT_TIME = int(os.getenv("REQUEST_WAIT_TIME_SECS", "0").strip())
+try:
+    MAX_RUNTIME_SECS = int(os.getenv("MAX_RUNTIME_SECS", "0").strip() or "0")
+except ValueError:
+    MAX_RUNTIME_SECS = 0
 SSH_AUTHORIZED_KEYS_FILE = os.getenv("SSH_AUTHORIZED_KEYS_FILE", "").strip()
 OCI_IMAGE_ID = os.getenv("OCI_IMAGE_ID", None).strip() if os.getenv("OCI_IMAGE_ID") else None
 OCI_COMPUTE_SHAPE = os.getenv("OCI_COMPUTE_SHAPE", ARM_SHAPE).strip()
@@ -122,9 +128,10 @@ def validate_always_free_compliance():
         )
     
     if oci_region not in ALWAYS_FREE_REGIONS and oci_region:
+        allowed_regions = ", ".join(ALWAYS_FREE_REGIONS)
         errors.append(
             f"🚨 CRITICAL: Region '{oci_region}' is NOT Always-Free eligible!\n"
-            f"   REQUIRED regions: us-ashburn-1 or us-phoenix-1\n"
+            f"   REQUIRED regions: {allowed_regions}\n"
             f"   Using other regions WILL incur PAYG charges!"
         )
     
@@ -498,8 +505,12 @@ def send_discord_message(message):
             logging.error("Failed to send Discord message: %s", e)
 
 
-def launch_instance():
+def launch_instance() -> bool:
     """Launches an OCI Compute instance using the specified parameters.
+
+    Returns:
+        bool: True if an instance is created (or already exists), False if the run ends
+        gracefully (e.g., MAX_RUNTIME_SECS reached without capacity).
 
     Raises:
         Exception: Raises an exception if an unexpected error occurs.
@@ -577,7 +588,18 @@ def launch_instance():
     else:
         shape_config = oci.core.models.LaunchInstanceShapeConfigDetails(ocpus=1, memory_in_gbs=1)
 
+    start_time = time.monotonic()
+
     while not instance_exist_flag:
+        if MAX_RUNTIME_SECS and (time.monotonic() - start_time) >= MAX_RUNTIME_SECS:
+            msg = (
+                f"Max runtime ({MAX_RUNTIME_SECS}s) reached without INSTANCE_CREATED. "
+                "Exiting gracefully so the scheduler can try again later."
+            )
+            logging_step5.info(msg)
+            write_into_file(os.path.join(os.getcwd(), "MAX_RUNTIME_REACHED"), msg + "\n")
+            return False
+
         try:
             launch_instance_response = compute_client.launch_instance(
                 launch_instance_details=oci.core.models.LaunchInstanceDetails(
@@ -629,12 +651,17 @@ def launch_instance():
             }
             handle_errors("launch_instance", data, logging_step5)
 
+    return True
+
 
 if __name__ == "__main__":
     send_discord_message("🚀 OCI Instance Creation Script: Starting up! Let's create some cloud magic!")
     try:
-        launch_instance()
-        send_discord_message("🎉 Success! OCI Instance has been created. Time to celebrate!")
+        created = launch_instance()
+        if created:
+            send_discord_message("🎉 Success! OCI Instance has been created. Time to celebrate!")
+        else:
+            send_discord_message("⏱️ No capacity yet. Max runtime reached; will try again later.")
     except Exception as e:
         error_message = f"😱 Oops! Something went wrong with the OCI Instance Creation Script:\n{str(e)}"
         send_discord_message(error_message)

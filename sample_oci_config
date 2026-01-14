@@ -11,8 +11,8 @@ user=ocid1.user.oc1..exampleuserid123456789
 tenancy=ocid1.tenancy.oc1..exampletenancyid123456789
 
 # Region where you want to create instances
-# Common regions: us-ashburn-1, us-phoenix-1, eu-frankfurt-1, ap-tokyo-1
-region=us-ashburn-1
+# Common regions: ca-toronto-1, us-ashburn-1, us-phoenix-1, eu-frankfurt-1, ap-tokyo-1
+region=ca-toronto-1
 
 # Your API signing key fingerprint
 # Get this from: Profile -> API Keys -> Add Key -> Copy fingerprint

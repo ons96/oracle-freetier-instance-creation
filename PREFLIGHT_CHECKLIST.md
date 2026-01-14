@@ -11,7 +11,7 @@ This checklist ensures your configuration is 100% Always-Free compliant and prev
 ### Account Verification
 - [ ] Created OCI account with **Always-Free tier** (NOT PAYG)
 - [ ] Verified account type shows **"Always-Free"** in OCI Console
-- [ ] Confirmed region is **us-ashburn-1** or **us-phoenix-1**
+- [ ] Confirmed region is **ca-toronto-1**, **us-ashburn-1**, or **us-phoenix-1**
 - [ ] Checked Billing → Cost Analysis shows **$0.00**
 - [ ] Did NOT accept any PAYG upgrade offers during signup
 - [ ] Service Limits show "Always-Free" tier enabled
@@ -36,14 +36,14 @@ This checklist ensures your configuration is 100% Always-Free compliant and prev
 - [ ] `OCI_TENANCY_ID` set with complete Tenancy OCID
 - [ ] `OCI_FINGERPRINT` set with API key fingerprint
 - [ ] `OCI_PRIVATE_KEY` set with **entire 27-line private key** (including BEGIN/END lines)
-- [ ] `OCI_REGION` set to **us-ashburn-1** or **us-phoenix-1**
+- [ ] `OCI_REGION` set to **ca-toronto-1**, **us-ashburn-1**, or **us-phoenix-1**
 - [ ] `DISCORD_WEBHOOK` (optional) set if Discord notifications wanted
 
 ### Secret Verification
 - [ ] NO missing secrets (all 5 required secrets populated)
 - [ ] Private key pasted **exactly** as downloaded (no missing lines)
 - [ ] No extra spaces or characters in OCID values
-- [ ] Region is **exactly** one of the two Always-Free regions
+- [ ] Region is **exactly** one of the Always-Free regions (`ca-toronto-1`, `us-ashburn-1`, `us-phoenix-1`)
 - [ ] No "placeholder" values (like "your_user_ocid_here")
 
 ---
@@ -53,7 +53,7 @@ This checklist ensures your configuration is 100% Always-Free compliant and prev
 ### Always-Free Tier Knowledge
 - [ ] Understand **VM.Standard.A1.Flex is the ONLY Always-Free shape**
 - [ ] Know that **E2.Micro can trigger PAYG charges** (removed from workflow)
-- [ ] Understand **us-ashburn-1 or us-phoenix-1 are the ONLY free regions**
+- [ ] Understand **ca-toronto-1, us-ashburn-1, and us-phoenix-1 are the allowed Always-Free regions in this repo**
 - [ ] Know **max storage is 200GB total** across all volumes
 - [ ] Understand **boot volume minimum is 50GB**
 - [ ] Know **4 OCPU + 24GB RAM = $0.00/month**
@@ -70,7 +70,7 @@ This checklist ensures your configuration is 100% Always-Free compliant and prev
 ### GitHub Actions Workflow
 - [ ] Read the complete workflow file (`.github/workflows/oci-vps-signup.yml`)
 - [ ] Understand workflow validates Always-Free before execution
-- [ ] Know workflow timeout is 330 minutes (5.5 hours)
+- [ ] Know workflow job timeout is 350 minutes (GitHub limit) and scheduled runs cap the script runtime to ~20 minutes (to save minutes)
 - [ ] Understand auto-retry happens every 60 seconds
 - [ ] Know workflow locks shape to VM.Standard.A1.Flex
 - [ ] Understand region validation occurs during execution
@@ -89,7 +89,7 @@ This checklist ensures your configuration is 100% Always-Free compliant and prev
 ### Code Review (Important!)
 - [ ] Reviewed changes to **main.py** Always-Free validation
 - [ ] Verified `ALWAYS_FREE_SHAPES` only contains VM.Standard.A1.Flex
-- [ ] Checked `ALWAYS_FREE_REGIONS` has only us-ashburn-1 and us-phoenix-1
+- [ ] Checked `ALWAYS_FREE_REGIONS` is restricted (ca-toronto-1, us-ashburn-1, us-phoenix-1)
 - [ ] Confirmed `ALWAYS_FREE_MAX_STORAGE_GB = 200`
 - [ ] Verified `validate_always_free_compliance()` exists and is called first
 - [ ] Checked GitHub workflow enforces Always-Free settings
@@ -106,7 +106,7 @@ Run these checks **before** launching workflow:
 echo "Checks to perform manually:"
 echo "1. Go to repo → Settings → Secrets → Actions"
 echo "2. Verify all 5 required secrets exist"
-echo "3. Verify OCI_REGION is us-ashburn-1 or us-phoenix-1"
+echo "3. Verify OCI_REGION is ca-toronto-1, us-ashburn-1, or us-phoenix-1"
 echo "4. Verify OCI_PRIVATE_KEY is full 27-line key"
 ```
 

@@ -58,7 +58,7 @@ if [[ "$CI" == "true" ]] || [[ "$GITHUB_ACTIONS" == "true" ]]; then
         echo "  - OCI_TENANCY_ID: Your OCI tenancy OCID"
         echo "  - OCI_FINGERPRINT: Your API key fingerprint"
         echo "  - OCI_PRIVATE_KEY: Your private key content"
-        echo "  - OCI_REGION: Your preferred region (e.g., us-ashburn-1)"
+        echo "  - OCI_REGION: Your preferred region (e.g., ca-toronto-1)"
         echo ""
         echo "For GitHub Actions, set these in repository secrets."
         exit 1
