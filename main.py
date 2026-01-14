@@ -524,14 +524,35 @@ def launch_instance() -> bool:
     oci_tenancy = user_info.compartment_id
     logging.info("OCI_TENANCY: %s", oci_tenancy)
 
-    # Step 2 - Get AD Name
+    # Step 2 - Get AD Name with Multi-AD Retry Logic
     availability_domains = execute_oci_command(iam_client,
                                                "list_availability_domains",
                                                compartment_id=oci_tenancy)
-    oci_ad_name = [item.name for item in availability_domains if
-                   any(item.name.endswith(oct_ad) for oct_ad in OCT_FREE_AD.split(","))]
-    oci_ad_names = itertools.cycle(oci_ad_name)
+    
+    # Get all available ADs and filter by the specified AD pattern
+    available_ads = [item.name for item in availability_domains]
+    logging.info("Available ADs in region: %s", available_ads)
+    
+    # Parse the OCT_FREE_AD input (can be single AD or comma-separated list)
+    requested_ads = [ad.strip() for ad in OCT_FREE_AD.split(",") if ad.strip()]
+    
+    # If no specific AD requested, use all available ADs
+    if not requested_ads:
+        requested_ads = available_ads
+    
+    # Filter to only available ADs that match the requested pattern
+    oci_ad_name = [ad for ad in available_ads 
+                   if any(ad.endswith(requested_ad) for requested_ad in requested_ads)]
+    
+    if not oci_ad_name:
+        error_msg = f"No available ADs found matching requested ADs: {requested_ads}. Available ADs: {available_ads}"
+        logging.error(error_msg)
+        raise ValueError(error_msg)
+    
     logging.info("OCI_AD_NAME: %s", oci_ad_name)
+    
+    # Create a cycle for retry logic, but also keep track of attempts
+    oci_ad_cycle = itertools.cycle(oci_ad_name)
 
     # Step 3 - Get Subnet ID
     oci_subnet_id = OCI_SUBNET_ID
@@ -566,17 +587,28 @@ def launch_instance() -> bool:
     boot_volume_size = max(50, int(BOOT_VOLUME_SIZE))
     
     # Additional validation for Always-Free storage limit
-    if boot_volume_size > ALWAYS_FREE_MAX_STORAGE_GB:
+    # Note: We use 100GB as the practical limit to be extra safe, even though Always-Free allows 200GB total
+    if boot_volume_size > 100:
         logging.critical(
-            "🚨 CRITICAL: Boot volume %sGB exceeds Always-Free limit of %sGB!\n"
+            "🚨 CRITICAL: Boot volume %sGB exceeds safe Always-Free limit of 100GB!\n"
             "This WILL trigger PAYG charges. Aborting launch.\n"
-            "Set BOOT_VOLUME_SIZE to %sGB or less in oci.env",
-            boot_volume_size, ALWAYS_FREE_MAX_STORAGE_GB, ALWAYS_FREE_MAX_STORAGE_GB
+            "Set BOOT_VOLUME_SIZE to 100GB or less in oci.env",
+            boot_volume_size
         )
         raise ValueError(
-            f"Boot volume {boot_volume_size}GB exceeds Always-Free limit of {ALWAYS_FREE_MAX_STORAGE_GB}GB. "
-            "This would trigger PAYG charges. Aborting instance launch."
+            f"Boot volume {boot_volume_size}GB exceeds safe Always-Free limit of 100GB. "
+            "This would trigger PAYG charges. Aborting instance launch. "
+            "Maximum allowed: 100GB (within overall 200GB Always-Free storage limit)."
         )
+    
+    # Warning if boot volume is set to maximum
+    if boot_volume_size == 100:
+        logging.warning(
+            "⚠️ WARNING: Boot volume set to maximum safe limit of 100GB. "
+            "Remember that total Always-Free storage across ALL volumes is limited to 200GB."
+        )
+    
+    logging.info("✅ Boot volume size validated: %sGB (within 100GB safe limit)", boot_volume_size)
 
     ssh_public_key = read_or_generate_ssh_public_key(SSH_AUTHORIZED_KEYS_FILE)
 
@@ -590,6 +622,10 @@ def launch_instance() -> bool:
 
     start_time = time.monotonic()
 
+    # Track AD attempts for multi-AD retry logic
+    ad_attempts = {}
+    current_ad_index = 0
+
     while not instance_exist_flag:
         if MAX_RUNTIME_SECS and (time.monotonic() - start_time) >= MAX_RUNTIME_SECS:
             msg = (
@@ -600,10 +636,16 @@ def launch_instance() -> bool:
             write_into_file(os.path.join(os.getcwd(), "MAX_RUNTIME_REACHED"), msg + "\n")
             return False
 
+        # Get current AD for this attempt
+        current_ad = oci_ad_name[current_ad_index % len(oci_ad_name)]
+        ad_attempts[current_ad] = ad_attempts.get(current_ad, 0) + 1
+
+        logging_step5.info("🎯 Attempting instance creation in AD: %s (Attempt %d)", current_ad, ad_attempts[current_ad])
+
         try:
             launch_instance_response = compute_client.launch_instance(
                 launch_instance_details=oci.core.models.LaunchInstanceDetails(
-                    availability_domain=next(oci_ad_names),
+                    availability_domain=current_ad,
                     compartment_id=oci_tenancy,
                     create_vnic_details=oci.core.models.CreateVnicDetails(
                         assign_public_ip=assign_public_ip,
@@ -631,19 +673,36 @@ def launch_instance() -> bool:
             )
             if launch_instance_response.status == 200:
                 logging_step5.info(
-                    "Command: launch_instance\nOutput: %s", launch_instance_response
+                    "✅ Command: launch_instance in AD %s\nOutput: %s", current_ad, launch_instance_response
                 )
                 instance_exist_flag = check_instance_state_and_write(oci_tenancy, OCI_COMPUTE_SHAPE)
+                if instance_exist_flag:
+                    logging_step5.info("🎉 Instance successfully created in AD: %s", current_ad)
+                    break
 
         except oci.exceptions.ServiceError as srv_err:
-            if srv_err.code == "LimitExceeded":                
-                logging_step5.info("Encoundered LimitExceeded Error checking if instance is created" \
-                                   "code :%s, message: %s, status: %s", srv_err.code, srv_err.message, srv_err.status)                
+            if srv_err.code == "LimitExceeded":
+                logging_step5.info("Encountered LimitExceeded Error checking if instance is created" \
+                                    "code :%s, message: %s, status: %s", srv_err.code, srv_err.message, srv_err.status)
                 instance_exist_flag = check_instance_state_and_write(oci_tenancy, OCI_COMPUTE_SHAPE)
                 if instance_exist_flag:
                     logging_step5.info("%s , exiting the program", srv_err.code)
                     sys.exit()
-                logging_step5.info("Didn't find an instance , proceeding with retries")     
+                logging_step5.info("Didn't find an instance , proceeding with retries")
+            elif srv_err.code in ("OutOfCapacity", "Out of host capacity") or "capacity" in srv_err.message.lower():
+                logging_step5.warning("🚨 Capacity error in AD %s: %s. Trying next AD...", current_ad, srv_err.message)
+                # Move to next AD for retry
+                current_ad_index += 1
+
+                # If we've tried all ADs, start from the beginning
+                if current_ad_index >= len(oci_ad_name):
+                    logging_step5.info("⏳ All ADs tried once. Starting new cycle of AD attempts...")
+                    current_ad_index = 0
+
+                # Wait before retrying
+                time.sleep(WAIT_TIME)
+                continue
+
             data = {
                 "status": srv_err.status,
                 "code": srv_err.code,

@@ -67,9 +67,10 @@ jobs:
           echo "=================================="
           echo "Shape: VM.Standard.A1.Flex ✓ (Ampere ARM, 4 OCPU, 24GB)"
           echo "Region: ca-toronto-1, us-ashburn-1, us-phoenix-1 ✓"
-          echo "Storage: Max 200GB total ✓"
+          echo "Storage: Max 100GB boot volume (safe limit) ✓"
           echo "OS: Canonical Ubuntu 22.04 ✓"
           echo "Cost: $0.00/month guaranteed ✓"
+          echo "Multi-AD Retry: AD-1 → AD-2 → AD-3 ✓"
           echo ""
 
           missing=0
@@ -139,6 +140,22 @@ jobs:
           OCI_PRIVATE_KEY: ${{ secrets.OCI_PRIVATE_KEY }}
           OCI_REGION: ${{ secrets.OCI_REGION }}
         run: |
+          echo "=== DEBUG: OCI Environment Variables ==="
+          echo "OCI_USER_ID length: ${#OCI_USER_ID}"
+          echo "OCI_TENANCY_ID length: ${#OCI_TENANCY_ID}"
+          echo "OCI_FINGERPRINT length: ${#OCI_FINGERPRINT}"
+          echo "OCI_REGION: $OCI_REGION"
+          echo "OCI_PRIVATE_KEY length: ${#OCI_PRIVATE_KEY}"
+
+          # Validate that all required variables are set
+          if [ -z "$OCI_USER_ID" ] || [ -z "$OCI_TENANCY_ID" ] || [ -z "$OCI_FINGERPRINT" ] || [ -z "$OCI_REGION" ] || [ -z "$OCI_PRIVATE_KEY" ]; then
+            echo "❌ ERROR: One or more OCI secrets are empty!"
+            exit 1
+          fi
+
+          mkdir -p ~/.oci
+
+          # Create OCI config file with proper validation
           cat > ~/.oci/config << EOF
           [DEFAULT]
           user=$OCI_USER_ID
@@ -148,8 +165,19 @@ jobs:
           region=$OCI_REGION
           EOF
 
+          # Debug: verify the config was created with proper values
+          echo "=== OCI Config Content ==="
+          cat ~/.oci/config
+          echo "=== End OCI Config ==="
+
+          # Create private key file
           printf '%s' "$OCI_PRIVATE_KEY" > ~/.oci/oci_private_key.pem
           chmod 600 ~/.oci/oci_private_key.pem
+
+          # Verify private key was created
+          echo "=== Private Key Info ==="
+          ls -la ~/.oci/oci_private_key.pem
+          echo "Private key file created successfully"
 
       - name: Configure max runtime
         run: |
@@ -195,6 +223,22 @@ jobs:
           CI: true
           GITHUB_ACTIONS: true
         run: |
+          echo "=== DEBUG: Environment Variables for main.py ==="
+          echo "OCI_CONFIG: $OCI_CONFIG"
+          echo "OCT_FREE_AD: $OCT_FREE_AD"
+          echo "BOOT_VOLUME_SIZE: $BOOT_VOLUME_SIZE"
+          echo "OCI_COMPUTE_SHAPE: $OCI_COMPUTE_SHAPE"
+
+          # Verify OCI config file exists and has content
+          if [ -f "$OCI_CONFIG" ]; then
+            echo "✅ OCI config file exists at: $OCI_CONFIG"
+            echo "OCI config content:"
+            cat "$OCI_CONFIG"
+          else
+            echo "❌ ERROR: OCI config file not found at: $OCI_CONFIG"
+            exit 1
+          fi
+
           echo "Starting OCI instance creation..."
           python main.py
 
@@ -250,6 +294,8 @@ jobs:
             echo "- Auto-stop variable (OCI_AUTOSTOP): \`${{ vars.OCI_AUTOSTOP || 'not set' }}\`"
             echo "- OCI_REGION secret: \`${{ secrets.OCI_REGION != '' && 'set' || 'missing' }}\`"
             echo "- MAX_RUNTIME_SECS: \`${MAX_RUNTIME_SECS}\`"
+            echo "- Multi-AD Retry: AD-1 → AD-2 → AD-3 (automatic)"
+            echo "- Boot Volume Limit: 100GB (safe Always-Free limit)"
             echo ""
 
             if [ -f "INSTANCE_CREATED" ]; then
@@ -261,6 +307,7 @@ jobs:
             elif [ -f "MAX_RUNTIME_REACHED" ]; then
               echo "### ⏱️ No capacity yet"
               echo "This scheduled run stopped after the configured max runtime."
+              echo "The workflow automatically tried all availability domains (AD-1, AD-2, AD-3) before giving up."
               echo "```"
               cat MAX_RUNTIME_REACHED
               echo "```"
