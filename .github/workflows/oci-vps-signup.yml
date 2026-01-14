@@ -140,44 +140,61 @@ jobs:
           OCI_PRIVATE_KEY: ${{ secrets.OCI_PRIVATE_KEY }}
           OCI_REGION: ${{ secrets.OCI_REGION }}
         run: |
-          echo "=== DEBUG: OCI Environment Variables ==="
-          echo "OCI_USER_ID length: ${#OCI_USER_ID}"
-          echo "OCI_TENANCY_ID length: ${#OCI_TENANCY_ID}"
-          echo "OCI_FINGERPRINT length: ${#OCI_FINGERPRINT}"
-          echo "OCI_REGION: $OCI_REGION"
+          set -x  # Enable command echoing (shows every command executed)
+          
+          echo "=== DEBUG: Secret Values (first 50 chars) ==="
+          echo "OCI_USER_ID=${OCI_USER_ID:0:50}..."
+          echo "OCI_TENANCY_ID=${OCI_TENANCY_ID:0:50}..."
+          echo "OCI_FINGERPRINT=${OCI_FINGERPRINT:0:50}..."
+          echo "OCI_REGION=$OCI_REGION"
           echo "OCI_PRIVATE_KEY length: ${#OCI_PRIVATE_KEY}"
-
-          # Validate that all required variables are set
-          if [ -z "$OCI_USER_ID" ] || [ -z "$OCI_TENANCY_ID" ] || [ -z "$OCI_FINGERPRINT" ] || [ -z "$OCI_REGION" ] || [ -z "$OCI_PRIVATE_KEY" ]; then
-            echo "❌ ERROR: One or more OCI secrets are empty!"
-            exit 1
-          fi
-
+          
+          echo ""
+          echo "=== DEBUG: Creating ~/.oci directory ==="
           mkdir -p ~/.oci
-
-          # Create OCI config file with proper validation
+          ls -la ~/
+          ls -la ~/.oci/ || echo "Directory doesn't exist yet"
+          
+          echo ""
+          echo "=== DEBUG: Creating config file ==="
           cat > ~/.oci/config << EOF
-          [DEFAULT]
-          user=$OCI_USER_ID
-          fingerprint=$OCI_FINGERPRINT
-          key_file=$HOME/.oci/oci_private_key.pem
-          tenancy=$OCI_TENANCY_ID
-          region=$OCI_REGION
-          EOF
-
-          # Debug: verify the config was created with proper values
-          echo "=== OCI Config Content ==="
+[DEFAULT]
+user=$OCI_USER_ID
+fingerprint=$OCI_FINGERPRINT
+key_file=~/.oci/oci_private_key.pem
+tenancy=$OCI_TENANCY_ID
+region=$OCI_REGION
+EOF
+          
+          echo ""
+          echo "=== DEBUG: Verifying config file ==="
+          ls -la ~/.oci/
+          test -f ~/.oci/config && echo "✅ Config file EXISTS" || echo "❌ Config file MISSING"
+          
+          echo ""
+          echo "=== DEBUG: Config file content ==="
           cat ~/.oci/config
-          echo "=== End OCI Config ==="
-
-          # Create private key file
+          
+          echo ""
+          echo "=== DEBUG: Checking for empty values ==="
+          grep -q "^user=$" ~/.oci/config && echo "⚠️ WARNING: user is empty!" || echo "✅ user is populated"
+          grep -q "^tenancy=$" ~/.oci/config && echo "⚠️ WARNING: tenancy is empty!" || echo "✅ tenancy is populated"
+          grep -q "^fingerprint=$" ~/.oci/config && echo "⚠️ WARNING: fingerprint is empty!" || echo "✅ fingerprint is populated"
+          grep -q "^region=$" ~/.oci/config && echo "⚠️ WARNING: region is empty!" || echo "✅ region is populated"
+          
+          echo ""
+          echo "=== DEBUG: Creating private key file ==="
           printf '%s' "$OCI_PRIVATE_KEY" > ~/.oci/oci_private_key.pem
           chmod 600 ~/.oci/oci_private_key.pem
-
-          # Verify private key was created
-          echo "=== Private Key Info ==="
           ls -la ~/.oci/oci_private_key.pem
-          echo "Private key file created successfully"
+          wc -l ~/.oci/oci_private_key.pem
+          
+          echo ""
+          echo "=== DEBUG: Final verification ==="
+          pwd
+          echo "HOME=$HOME"
+          echo "Expanded path: $(eval echo ~/.oci/config)"
+          test -f ~/.oci/config && echo "✅ FINAL CHECK: Config file exists" || echo "❌ FINAL CHECK: Config file missing"
 
       - name: Configure max runtime
         run: |
@@ -194,11 +211,29 @@ jobs:
 
       - name: Verify OCI configuration
         run: |
-          echo "Checking OCI configuration..."
-          ls -la ~/.oci/
-          echo "OCI config content:"
-          cat ~/.oci/config
+          echo "=== PRE-EXECUTION CHECK ==="
+          if [ -f ~/.oci/config ]; then
+            echo "✅ Config file found"
+            echo "File size: $(wc -c < ~/.oci/config) bytes"
+            echo "Line count: $(wc -l < ~/.oci/config)"
+            cat ~/.oci/config
+          else
+            echo "❌ Config file NOT found"
+            echo "Checking home directory:"
+            ls -la ~/ | grep oci || echo "No oci files found in home"
+            echo "Checking parent:"
+            ls -la ~/
+            exit 1
+          fi
           echo "MAX_RUNTIME_SECS=${MAX_RUNTIME_SECS}"
+
+      - name: Debug environment before main.py
+        run: |
+          echo "=== Environment Check Before main.py ==="
+          env | grep OCI | head -20
+          echo "Config file exists: $(test -f ~/.oci/config && echo YES || echo NO)"
+          echo "Current directory: $(pwd)"
+          echo "Home directory: $HOME"
 
       - name: Create instance with OCI
         env:
