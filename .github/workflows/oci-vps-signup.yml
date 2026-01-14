@@ -1,11 +1,6 @@
-name: Oracle Always-Free VPS Signup (Verified $0.00/month)
+name: Oracle Always-Free VPS Signup
 
 on:
-  schedule:
-    - cron: '0 3 * * *'
-    - cron: '0 9 * * *'
-    - cron: '0 15 * * *'
-    - cron: '0 21 * * *'
   workflow_dispatch:
     inputs:
       availability_domain:
@@ -17,119 +12,77 @@ on:
           - AD-1
           - AD-2
           - AD-3
-      subnet_id:
-        description: 'Subnet ID (optional, leave empty for auto-detect)'
+      boot_volume_size:
+        description: 'Boot volume size (Max 50GB for safety, default 50)'
         required: false
-        default: ''
-        type: string
-      image_id:
-        description: 'Custom Image ID (optional, leave empty to auto-detect)'
-        required: false
-        default: ''
+        default: '50'
         type: string
       instance_name:
         description: 'Instance display name'
         required: false
         default: 'github-actions-ampere-instance'
         type: string
-      boot_volume_size:
-        description: 'Boot volume size (Max 200GB Always-Free limit)'
-        required: false
-        default: '50'
-        type: string
-      max_runtime_minutes:
-        description: 'Max runtime per run (minutes). 0 = unlimited. Scheduled runs default to 20.'
-        required: false
-        default: '0'
-        type: string
+  schedule:
+    - cron: '0 3 * * *' # 3 AM UTC
+    - cron: '0 9 * * *' # 9 AM UTC
+    - cron: '0 15 * * *' # 3 PM UTC
+    - cron: '0 21 * * *' # 9 PM UTC
 
 permissions:
   contents: read
-  issues: write
   actions: write
-
-concurrency:
-  group: oci-vps-signup
-  cancel-in-progress: true
+  issues: write
 
 jobs:
   oracle-signup:
-    # Auto-stop: once INSTANCE_CREATED happens, the workflow writes OCI_AUTOSTOP=true
-    # and future scheduled runs will skip (manual dispatch will still work).
     if: ${{ github.event_name != 'schedule' || vars.OCI_AUTOSTOP != 'true' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 350  # Just under 6-hour GHA limit
+    timeout-minutes: 350
 
     steps:
-      - name: "🔍 Verify Always-Free Tier Configuration"
+      - name: Verify All Required Secrets
+        env:
+          OCI_USER_ID: ${{ secrets.OCI_USER_ID }}
+          OCI_TENANCY_ID: ${{ secrets.OCI_TENANCY_ID }}
+          OCI_FINGERPRINT: ${{ secrets.OCI_FINGERPRINT }}
+          OCI_PRIVATE_KEY: ${{ secrets.OCI_PRIVATE_KEY }}
+          OCI_REGION: ${{ secrets.OCI_REGION }}
         run: |
-          echo "🚨 ALWAYS-FREE TIER VERIFICATION"
-          echo "=================================="
-          echo "Shape: VM.Standard.A1.Flex ✓ (Ampere ARM, 4 OCPU, 24GB)"
-          echo "Region: ca-toronto-1, us-ashburn-1, us-phoenix-1 ✓"
-          echo "Storage: Max 100GB boot volume (safe limit) ✓"
-          echo "OS: Canonical Ubuntu 22.04 ✓"
-          echo "Cost: $0.00/month guaranteed ✓"
-          echo "Multi-AD Retry: AD-1 → AD-2 → AD-3 ✓"
-          echo ""
+          set -euo pipefail
 
+          echo "Verifying all required secrets..."
+          required=("OCI_USER_ID" "OCI_TENANCY_ID" "OCI_FINGERPRINT" "OCI_PRIVATE_KEY" "OCI_REGION")
           missing=0
 
-          region="${{ secrets.OCI_REGION }}"
-          if [ -n "$region" ]; then
-            if [ "$region" = "ca-toronto-1" ] || [ "$region" = "us-ashburn-1" ] || [ "$region" = "us-phoenix-1" ]; then
-              echo "OCI_REGION is Always-Free eligible ✓"
-            else
-              echo "❌ ERROR: OCI_REGION is not in the allowed Always-Free list (ca-toronto-1, us-ashburn-1, us-phoenix-1)"
+          for name in "${required[@]}"; do
+            if [ -z "${!name:-}" ]; then
+              echo "Missing secret: ${name}"
               missing=1
             fi
-          fi
-
-          echo ""
-          echo "⚠️  NEVER CHANGE THESE VALUES TO AVOID PAYG CHARGES"
-
-          if [ -z "${{ secrets.OCI_USER_ID }}" ]; then
-            echo "❌ ERROR: OCI_USER_ID secret not set!"
-            missing=1
-          fi
-          if [ -z "${{ secrets.OCI_TENANCY_ID }}" ]; then
-            echo "❌ ERROR: OCI_TENANCY_ID secret not set!"
-            missing=1
-          fi
-          if [ -z "${{ secrets.OCI_FINGERPRINT }}" ]; then
-            echo "❌ ERROR: OCI_FINGERPRINT secret not set!"
-            missing=1
-          fi
-          if [ -z "${{ secrets.OCI_PRIVATE_KEY }}" ]; then
-            echo "❌ ERROR: OCI_PRIVATE_KEY secret not set!"
-            missing=1
-          fi
-          if [ -z "${{ secrets.OCI_REGION }}" ]; then
-            echo "❌ ERROR: OCI_REGION secret not set!"
-            missing=1
-          fi
+          done
 
           if [ "$missing" -ne 0 ]; then
+            echo "Add missing secrets in: Settings → Secrets and variables → Actions"
             exit 1
           fi
 
-      - name: "📦 Checkout Repository"
+          echo "All required secrets are set"
+
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Cache pip dependencies
-        uses: actions/cache@v4
+      - name: Setup Python
+        uses: actions/setup-python@v4
         with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
+          python-version: '3.11'
+          cache: 'pip'
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Create OCI config directory
+      - name: Create OCI directory
         run: mkdir -p ~/.oci
 
       - name: Setup OCI configuration
@@ -140,148 +93,97 @@ jobs:
           OCI_PRIVATE_KEY: ${{ secrets.OCI_PRIVATE_KEY }}
           OCI_REGION: ${{ secrets.OCI_REGION }}
         run: |
-          set -x  # Enable command echoing (shows every command executed)
-          
-          echo "=== DEBUG: Secret Values (first 50 chars) ==="
-          echo "OCI_USER_ID=${OCI_USER_ID:0:50}..."
-          echo "OCI_TENANCY_ID=${OCI_TENANCY_ID:0:50}..."
-          echo "OCI_FINGERPRINT=${OCI_FINGERPRINT:0:50}..."
-          echo "OCI_REGION=$OCI_REGION"
+          set -euo pipefail
+
+          echo "=== Creating OCI Configuration ==="
+          echo "OCI_USER_ID (first 12 chars): ${OCI_USER_ID:0:12}..."
+          echo "OCI_TENANCY_ID (first 12 chars): ${OCI_TENANCY_ID:0:12}..."
+          echo "OCI_FINGERPRINT (first 12 chars): ${OCI_FINGERPRINT:0:12}..."
+          echo "OCI_REGION: ${OCI_REGION}"
           echo "OCI_PRIVATE_KEY length: ${#OCI_PRIVATE_KEY}"
-          
-          echo ""
-          echo "=== DEBUG: Creating ~/.oci directory ==="
-          mkdir -p ~/.oci
-          ls -la ~/
-          ls -la ~/.oci/ || echo "Directory doesn't exist yet"
-          
-          echo ""
-          echo "=== DEBUG: Creating config file ==="
-          cat > ~/.oci/config << EOF
-[DEFAULT]
-user=$OCI_USER_ID
-fingerprint=$OCI_FINGERPRINT
-key_file=~/.oci/oci_private_key.pem
-tenancy=$OCI_TENANCY_ID
-region=$OCI_REGION
-EOF
-          
-          echo ""
-          echo "=== DEBUG: Verifying config file ==="
-          ls -la ~/.oci/
-          test -f ~/.oci/config && echo "✅ Config file EXISTS" || echo "❌ Config file MISSING"
-          
-          echo ""
-          echo "=== DEBUG: Config file content ==="
-          cat ~/.oci/config
-          
-          echo ""
-          echo "=== DEBUG: Checking for empty values ==="
-          grep -q "^user=$" ~/.oci/config && echo "⚠️ WARNING: user is empty!" || echo "✅ user is populated"
-          grep -q "^tenancy=$" ~/.oci/config && echo "⚠️ WARNING: tenancy is empty!" || echo "✅ tenancy is populated"
-          grep -q "^fingerprint=$" ~/.oci/config && echo "⚠️ WARNING: fingerprint is empty!" || echo "✅ fingerprint is populated"
-          grep -q "^region=$" ~/.oci/config && echo "⚠️ WARNING: region is empty!" || echo "✅ region is populated"
-          
-          echo ""
-          echo "=== DEBUG: Creating private key file ==="
+
+          cat > ~/.oci/config <<CONFIG_EOF
+          [DEFAULT]
+          user=${OCI_USER_ID}
+          fingerprint=${OCI_FINGERPRINT}
+          key_file=~/.oci/oci_private_key.pem
+          tenancy=${OCI_TENANCY_ID}
+          region=${OCI_REGION}
+          CONFIG_EOF
+
           printf '%s' "$OCI_PRIVATE_KEY" > ~/.oci/oci_private_key.pem
           chmod 600 ~/.oci/oci_private_key.pem
-          ls -la ~/.oci/oci_private_key.pem
-          wc -l ~/.oci/oci_private_key.pem
-          
+
           echo ""
-          echo "=== DEBUG: Final verification ==="
-          pwd
-          echo "HOME=$HOME"
-          echo "Expanded path: $(eval echo ~/.oci/config)"
-          test -f ~/.oci/config && echo "✅ FINAL CHECK: Config file exists" || echo "❌ FINAL CHECK: Config file missing"
-
-      - name: Configure max runtime
-        run: |
-          if [ "${{ github.event_name }}" = "schedule" ]; then
-            echo "MAX_RUNTIME_SECS=1200" >> "$GITHUB_ENV"  # 20 minutes per scheduled run
-          else
-            mins="${{ github.event.inputs.max_runtime_minutes || '0' }}"
-            if echo "$mins" | grep -Eq '^[0-9]+$' && [ "$mins" -gt 0 ]; then
-              echo "MAX_RUNTIME_SECS=$((mins * 60))" >> "$GITHUB_ENV"
-            else
-              echo "MAX_RUNTIME_SECS=0" >> "$GITHUB_ENV"
-            fi
-          fi
-
-      - name: Verify OCI configuration
-        run: |
-          echo "=== PRE-EXECUTION CHECK ==="
+          echo "=== Verifying OCI Configuration ==="
           if [ -f ~/.oci/config ]; then
-            echo "✅ Config file found"
-            echo "File size: $(wc -c < ~/.oci/config) bytes"
-            echo "Line count: $(wc -l < ~/.oci/config)"
-            cat ~/.oci/config
+            echo "Config file created"
+            echo "Config content (redacted):"
+            sed -E \
+              -e 's/^(user=).+$/\1[REDACTED]/' \
+              -e 's/^(tenancy=).+$/\1[REDACTED]/' \
+              ~/.oci/config
           else
-            echo "❌ Config file NOT found"
-            echo "Checking home directory:"
-            ls -la ~/ | grep oci || echo "No oci files found in home"
-            echo "Checking parent:"
-            ls -la ~/
+            echo "Config file NOT created"
             exit 1
           fi
-          echo "MAX_RUNTIME_SECS=${MAX_RUNTIME_SECS}"
 
-      - name: Debug environment before main.py
-        run: |
-          echo "=== Environment Check Before main.py ==="
-          env | grep OCI | head -20
-          echo "Config file exists: $(test -f ~/.oci/config && echo YES || echo NO)"
-          echo "Current directory: $(pwd)"
-          echo "Home directory: $HOME"
-
-      - name: Create instance with OCI
+      - name: Validate boot volume size
         env:
+          BOOT_VOLUME_SIZE: ${{ github.event.inputs.boot_volume_size || '50' }}
+        run: |
+          set -euo pipefail
+
+          boot_size="${BOOT_VOLUME_SIZE}"
+          if ! [[ "$boot_size" =~ ^[0-9]+$ ]]; then
+            echo "Boot volume size must be a whole number of GB. Got: '$boot_size'"
+            exit 1
+          fi
+
+          if [ "$boot_size" -gt 100 ]; then
+            echo "Boot volume size ${boot_size}GB exceeds 100GB safety limit"
+            echo "For Always-Free safety, use 50GB unless you know your tenancy's exact free storage constraints."
+            exit 1
+          fi
+
+          echo "Boot volume size valid: ${boot_size}GB"
+
+      - name: Create instance
+        env:
+          OCI_CONFIG: ~/.oci/config
           OCI_USER_ID: ${{ secrets.OCI_USER_ID }}
           OCI_TENANCY_ID: ${{ secrets.OCI_TENANCY_ID }}
           OCI_FINGERPRINT: ${{ secrets.OCI_FINGERPRINT }}
           OCI_PRIVATE_KEY: ${{ secrets.OCI_PRIVATE_KEY }}
           OCI_REGION: ${{ secrets.OCI_REGION }}
-          OCI_CONFIG: ~/.oci/config
           OCT_FREE_AD: ${{ github.event.inputs.availability_domain || 'AD-1' }}
-          DISPLAY_NAME: ${{ github.event.inputs.instance_name || 'github-actions-arm-instance' }}
-          OCI_COMPUTE_SHAPE: "VM.Standard.A1.Flex"
-          OCI_SUBNET_ID: ${{ github.event.inputs.subnet_id || '' }}
-          OCI_IMAGE_ID: ${{ github.event.inputs.image_id || '' }}
-          OPERATING_SYSTEM: "Canonical Ubuntu"
-          OS_VERSION: "22.04"
-          ASSIGN_PUBLIC_IP: "false"
+          DISPLAY_NAME: ${{ github.event.inputs.instance_name || 'github-actions-ampere-instance' }}
+          OCI_COMPUTE_SHAPE: VM.Standard.A1.Flex
           BOOT_VOLUME_SIZE: ${{ github.event.inputs.boot_volume_size || '50' }}
-          SECOND_MICRO_INSTANCE: "false"
-          REQUEST_WAIT_TIME_SECS: "60"
-          SSH_AUTHORIZED_KEYS_FILE: "id_rsa.pub"
-          CI: true
-          GITHUB_ACTIONS: true
+          OPERATING_SYSTEM: Canonical Ubuntu
+          OS_VERSION: '22.04'
+          ASSIGN_PUBLIC_IP: 'false'
+          SECOND_MICRO_INSTANCE: 'false'
+          CI: 'true'
+          GITHUB_ACTIONS: 'true'
         run: |
-          echo "=== DEBUG: Environment Variables for main.py ==="
-          echo "OCI_CONFIG: $OCI_CONFIG"
-          echo "OCT_FREE_AD: $OCT_FREE_AD"
-          echo "BOOT_VOLUME_SIZE: $BOOT_VOLUME_SIZE"
-          echo "OCI_COMPUTE_SHAPE: $OCI_COMPUTE_SHAPE"
+          set -euo pipefail
 
-          # Verify OCI config file exists and has content
-          if [ -f "$OCI_CONFIG" ]; then
-            echo "✅ OCI config file exists at: $OCI_CONFIG"
-            echo "OCI config content:"
-            cat "$OCI_CONFIG"
-          else
-            echo "❌ ERROR: OCI config file not found at: $OCI_CONFIG"
+          echo "Starting instance creation..."
+          echo "AD: ${OCT_FREE_AD} | Boot: ${BOOT_VOLUME_SIZE}GB | Region: ${OCI_REGION}"
+
+          if [ ! -f "${OCI_CONFIG}" ]; then
+            echo "OCI config file not found at: ${OCI_CONFIG}"
             exit 1
           fi
 
-          echo "Starting OCI instance creation..."
           python main.py
 
-      - name: Upload instance details
+      - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: instance-details
+          name: instance-logs
           path: |
             INSTANCE_CREATED
             MAX_RUNTIME_REACHED
@@ -289,75 +191,29 @@ EOF
             launch_instance.log
             ERROR_IN_CONFIG.log
             UNHANDLED_ERROR.log
-            images_list.json
-            id_rsa.pub
           retention-days: 30
 
-      - name: Display results
+      - name: Show results
         if: always()
         run: |
-          echo "=== Instance Creation Results ==="
-          if [ -f "INSTANCE_CREATED" ]; then
-            echo "✅ Instance created successfully!"
+          set -euo pipefail
+
+          echo "=== Results ==="
+          if [ -f INSTANCE_CREATED ]; then
+            echo "Instance created!"
             cat INSTANCE_CREATED
-          elif [ -f "MAX_RUNTIME_REACHED" ]; then
-            echo "⏱️ Max runtime reached; no instance created yet."
+          elif [ -f MAX_RUNTIME_REACHED ]; then
+            echo "Max runtime reached, no capacity yet"
             cat MAX_RUNTIME_REACHED
           else
-            echo "❌ Instance creation failed"
+            echo "Instance creation failed"
           fi
 
-          echo ""
-          echo "=== Log Files (tail) ==="
-          if [ -f "setup_and_info.log" ]; then
-            echo "Setup log:"
-            tail -20 setup_and_info.log
-          fi
-
-          if [ -f "launch_instance.log" ]; then
-            echo "Launch log:"
-            tail -20 launch_instance.log
-          fi
-
-      - name: Write workflow summary
-        if: always()
-        run: |
-          {
-            echo "## Oracle Always-Free VPS Signup"
-            echo ""
-            echo "- Trigger: \`${{ github.event_name }}\`"
-            echo "- Auto-stop variable (OCI_AUTOSTOP): \`${{ vars.OCI_AUTOSTOP || 'not set' }}\`"
-            echo "- OCI_REGION secret: \`${{ secrets.OCI_REGION != '' && 'set' || 'missing' }}\`"
-            echo "- MAX_RUNTIME_SECS: \`${MAX_RUNTIME_SECS}\`"
-            echo "- Multi-AD Retry: AD-1 → AD-2 → AD-3 (automatic)"
-            echo "- Boot Volume Limit: 100GB (safe Always-Free limit)"
-            echo ""
-
-            if [ -f "INSTANCE_CREATED" ]; then
-              echo "### ✅ Instance created"
-              echo "\`INSTANCE_CREATED\` contents:"
-              echo "```"
-              cat INSTANCE_CREATED
-              echo "```"
-            elif [ -f "MAX_RUNTIME_REACHED" ]; then
-              echo "### ⏱️ No capacity yet"
-              echo "This scheduled run stopped after the configured max runtime."
-              echo "The workflow automatically tried all availability domains (AD-1, AD-2, AD-3) before giving up."
-              echo "```"
-              cat MAX_RUNTIME_REACHED
-              echo "```"
-            else
-              echo "### ❌ Instance not created"
-              echo "Check artifacts for logs."
-            fi
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Auto-stop future scheduled runs + notify via GitHub issue
-        if: ${{ hashFiles('INSTANCE_CREATED') != '' }}
+      - name: Auto-stop on success
+        if: hashFiles('INSTANCE_CREATED') != ''
         uses: actions/github-script@v7
         with:
           script: |
-            const fs = require('fs');
             const owner = context.repo.owner;
             const repo = context.repo.repo;
 
@@ -383,49 +239,14 @@ EOF
               }
             }
 
-            const details = fs.readFileSync('INSTANCE_CREATED', 'utf8').trim();
-            const runUrl = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
-            const title = '✅ OCI Always-Free VPS created';
-            const body = [
-              'An Oracle Always-Free VPS instance has been created.',
-              '',
-              `Workflow run: ${runUrl}`,
-              '',
-              'Instance details:',
-              '```',
-              details,
-              '```',
-              '',
-              'Auto-stop has been enabled by setting repository variable `OCI_AUTOSTOP=true`.',
-              'To re-enable scheduled attempts: delete the variable or set it to `false` under Settings → Secrets and variables → Actions → Variables.',
-            ].join('\n');
-
-            // 1) Auto-stop future scheduled runs
             await upsertRepoVariable('OCI_AUTOSTOP', 'true');
 
-            // 2) Create (or update) an issue to trigger GitHub email notifications
-            const assignee = context.actor;
-            const issues = await github.paginate(github.rest.issues.listForRepo, {
+            const fs = require('fs');
+            const details = fs.readFileSync('INSTANCE_CREATED', 'utf8');
+            await github.rest.issues.create({
               owner,
               repo,
-              state: 'open',
-              per_page: 100,
+              title: '✅ Oracle Always-Free VPS Created',
+              body: `Instance has been successfully created!\n\n\`\`\`\n${details}\n\`\`\`\n\nScheduled runs have been auto-disabled by setting repository variable OCI_AUTOSTOP=true.`,
+              assignees: [context.actor],
             });
-
-            const existing = issues.find(i => i.title === title);
-            if (existing) {
-              await github.rest.issues.createComment({
-                owner,
-                repo,
-                issue_number: existing.number,
-                body,
-              });
-            } else {
-              await github.rest.issues.create({
-                owner,
-                repo,
-                title,
-                body,
-                assignees: [assignee],
-              });
-            }
