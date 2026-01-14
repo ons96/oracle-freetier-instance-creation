@@ -14,7 +14,7 @@ This guide ensures your Oracle Cloud Infrastructure (OCI) instance remains **100
 - **CPU:** 4 OCPU (Ampere Computing ARM64 processor)
 - **Memory:** 24 GB RAM
 - **Storage:** Up to 200GB total (all volumes combined)
-- **Regions:** ca-toronto-1, us-ashburn-1, or us-phoenix-1
+- **Regions:** us-ashburn-1, us-phoenix-1, or ca-toronto-1
 - **Operating System:** Canonical Ubuntu 22.04 LTS
 - **Cost:** **$0.00/month guaranteed** (if configuration maintained)
 
@@ -24,12 +24,12 @@ This guide ensures your Oracle Cloud Infrastructure (OCI) instance remains **100
 
 ### **NEVER DO THESE (Will Trigger PAYG Charges):**
 
-❌ **Never change compute shape** - Only use `VM.Standard.A1.Flex`  
-❌ **Never use other regions** - Only `ca-toronto-1`, `us-ashburn-1`, or `us-phoenix-1`  
-❌ **Never exceed 200GB storage** - Total across ALL volumes  
-❌ **Never accept PAYG upgrade** during Oracle signup  
-❌ **Never create resources in non-free compartments**  
-❌ **Never change boot volume above 200GB** in code  
+❌ **Never change compute shape** - Only use `VM.Standard.A1.Flex`
+❌ **Never use other regions** - Only `us-ashburn-1`, `us-phoenix-1`, or `ca-toronto-1`
+❌ **Never exceed 200GB storage** - Total across ALL volumes
+❌ **Never accept PAYG upgrade** during Oracle signup
+❌ **Never create resources in non-free compartments**
+❌ **Never change boot volume above 200GB** in code
 
 ### **IMPORTANT REMINDERS:**
 
@@ -112,7 +112,7 @@ Add these secrets (ALL REQUIRED):
 | `OCI_TENANCY_ID` | Your Tenancy OCID | `ocid1.tenancy.oc1..xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx` |
 | `OCI_FINGERPRINT` | API Key Fingerprint | `aa:bb:cc:dd:ee:ff:gg:hh:ii:jj:kk:ll:mm:nn:oo:pp` |
 | `OCI_PRIVATE_KEY` | **Full Private Key** | Copy ENTIRE 27-line key from `oci_api_key.pem` |
-| `OCI_REGION` | **Always-Free Region** | `ca-toronto-1`, `us-ashburn-1`, or `us-phoenix-1` |
+| `OCI_REGION` | **Always-Free Region** | `us-ashburn-1`, `us-phoenix-1`, or `ca-toronto-1` |
 | `DISCORD_WEBHOOK` | (Optional) Discord webhook | `https://discord.com/api/webhooks/...` |
 
 ### ⚠️ CRITICAL: Private Key Format
@@ -230,7 +230,7 @@ After instance creation:
 
 ### "Region Not Always-Free Eligible"
 
-- OCI_REGION must be: `us-ashburn-1` or `us-phoenix-1`
+- OCI_REGION must be: `us-ashburn-1`, `us-phoenix-1`, or `ca-toronto-1`
 - Check Console → top-right region selector
 - Change if needed
 
@@ -259,6 +259,7 @@ After instance creation:
 - **Pre-Flight Checklist:** [PREFLIGHT_CHECKLIST.md](./PREFLIGHT_CHECKLIST.md)
 - **Cost Verification:** [COST_VERIFICATION.md](./COST_VERIFICATION.md)
 - **GitHub Secrets Guide:** [GITHUB_SECRETS_GUIDE.md](./GITHUB_SECRETS_GUIDE.md)
+- **Troubleshooting Guide:** [TROUBLESHOOTING.md](./TROUBLESHOOTING.md)
 - **Reference Guide:** https://guides.viren070.me/selfhosting/oracle
 
 ---

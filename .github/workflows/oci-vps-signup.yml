@@ -68,6 +68,31 @@ jobs:
 
           echo "All required secrets are set"
 
+      - name: Validate Always-Free Region
+        env:
+          OCI_REGION: ${{ secrets.OCI_REGION }}
+        run: |
+          set -euo pipefail
+          valid_regions=("ca-toronto-1" "us-ashburn-1" "us-phoenix-1")
+          if [[ ! " ${valid_regions[@]}" =~ " ${OCI_REGION}" ]]; then
+            echo "❌ ERROR: OCI_REGION '${OCI_REGION}' is NOT Always-Free eligible!"
+            echo "Required regions: ca-toronto-1, us-ashburn-1, or us-phoenix-1"
+            exit 1
+          fi
+          echo "✅ Region '${OCI_REGION}' is Always-Free eligible"
+
+      - name: Validate Private Key Format
+        env:
+          OCI_PRIVATE_KEY: ${{ secrets.OCI_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$OCI_PRIVATE_KEY" =~ -----BEGIN\ PRIVATE\ KEY-----.*-----END\ PRIVATE\ KEY----- ]]; then
+            echo "❌ ERROR: OCI_PRIVATE_KEY is not properly formatted"
+            echo "Expected format with BEGIN/END markers"
+            exit 1
+          fi
+          echo "✅ Private key format is valid"
+
       - name: Checkout code
         uses: actions/checkout@v4
 
@@ -128,6 +153,25 @@ jobs:
             exit 1
           fi
 
+      - name: Display Configuration Summary
+        env:
+          OCI_REGION: ${{ secrets.OCI_REGION }}
+          BOOT_VOLUME_SIZE: ${{ github.event.inputs.boot_volume_size || '50' }}
+          INSTANCE_NAME: ${{ github.event.inputs.instance_name || 'github-actions-ampere-instance' }}
+          AVAILABILITY_DOMAIN: ${{ github.event.inputs.availability_domain || 'AD-1' }}
+        run: |
+          echo "========================================"
+          echo "🎯 CONFIGURATION SUMMARY"
+          echo "========================================"
+          echo "Region: ${OCI_REGION}"
+          echo "Shape: VM.Standard.A1.Flex"
+          echo "Boot Volume: ${BOOT_VOLUME_SIZE}GB"
+          echo "Instance Name: ${INSTANCE_NAME}"
+          echo "Availability Domain: ${AVAILABILITY_DOMAIN}"
+          echo "========================================"
+          echo "✅ All settings are Always-Free compliant"
+          echo "========================================"
+
       - name: Validate boot volume size
         env:
           BOOT_VOLUME_SIZE: ${{ github.event.inputs.boot_volume_size || '50' }}
@@ -143,6 +187,7 @@ jobs:
           if [ "$boot_size" -gt 100 ]; then
             echo "Boot volume size ${boot_size}GB exceeds 100GB safety limit"
             echo "For Always-Free safety, use 50GB unless you know your tenancy's exact free storage constraints."
+            echo "Maximum allowed: 100GB (within overall 200GB Always-Free storage limit)"
             exit 1
           fi
 

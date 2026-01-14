@@ -16,7 +16,7 @@ This configuration automates creation of **Oracle Always-Free Tier** instances w
 - **CPU:** 4 OCPU @ Ampere Computing ARM64
 - **Memory:** 24 GB RAM
 - **Storage:** Max 200GB total (default: 50GB, safe limit: 100GB)
-- **Regions:** ca-toronto-1, us-ashburn-1, or us-phoenix-1
+- **Regions:** us-ashburn-1, us-phoenix-1, or ca-toronto-1
 - **OS:** Canonical Ubuntu 22.04 LTS
 - **Cost:** **$0.00/month guaranteed**
 - **Multi-AD Retry:** Automatic retry across AD-1 → AD-2 → AD-3
@@ -37,6 +37,7 @@ During Oracle signup, you will see Pay-As-You-Go prompts. **ALWAYS select Always
 3. **[AMPERE_CPU_EXPLAINED.md](./AMPERE_CPU_EXPLAINED.md)** - Understanding ARM64 Ampere processors
 4. **[GITHUB_SECRETS_GUIDE.md](./GITHUB_SECRETS_GUIDE.md)** - Step-by-step secrets configuration
 5. **[COST_VERIFICATION.md](./COST_VERIFICATION.md)** - How to verify $0.00 monthly bill
+6. **[TROUBLESHOOTING.md](./TROUBLESHOOTING.md)** - 🆘 Centralized troubleshooting guide
 
 **⚠️ READ THESE BEFORE DEPLOYING TO PREVENT PAYG CHARGES!**
 

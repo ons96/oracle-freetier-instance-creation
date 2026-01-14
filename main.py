@@ -136,10 +136,13 @@ def validate_always_free_compliance():
         )
     
     boot_volume_int = int(BOOT_VOLUME_SIZE) if str(BOOT_VOLUME_SIZE).isdigit() else 0
-    if boot_volume_int > ALWAYS_FREE_MAX_STORAGE_GB:
+    # Standardized on 100GB as the safe limit (within 200GB total Always-Free limit)
+    SAFE_BOOT_VOLUME_LIMIT = 100
+    if boot_volume_int > SAFE_BOOT_VOLUME_LIMIT:
         errors.append(
-            f"🚨 CRITICAL: Boot volume {boot_volume_int}GB exceeds Always-Free limit of {ALWAYS_FREE_MAX_STORAGE_GB}GB.\n"
+            f"🚨 CRITICAL: Boot volume {boot_volume_int}GB exceeds safe Always-Free limit of {SAFE_BOOT_VOLUME_LIMIT}GB.\n"
             f"   Maximum storage across ALL volumes is {ALWAYS_FREE_MAX_STORAGE_GB}GB.\n"
+            f"   Using {SAFE_BOOT_VOLUME_LIMIT}GB as the safe limit to prevent PAYG charges.\n"
             f"   Exceeding this WILL incur PAYG charges!"
         )
     
