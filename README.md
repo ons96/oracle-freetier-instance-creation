@@ -15,10 +15,11 @@ This configuration automates creation of **Oracle Always-Free Tier** instances w
 - **Shape:** VM.Standard.A1.Flex (Ampere ARM)
 - **CPU:** 4 OCPU @ Ampere Computing ARM64
 - **Memory:** 24 GB RAM
-- **Storage:** Max 200GB total (default: 50GB)
+- **Storage:** Max 200GB total (default: 50GB, safe limit: 100GB)
 - **Regions:** ca-toronto-1, us-ashburn-1, or us-phoenix-1
 - **OS:** Canonical Ubuntu 22.04 LTS
 - **Cost:** **$0.00/month guaranteed**
+- **Multi-AD Retry:** Automatic retry across AD-1 → AD-2 → AD-3
 
 ### ⚠️ Critical: NEVER Accept PAYG Upgrades
 During Oracle signup, you will see Pay-As-You-Go prompts. **ALWAYS select Always-Free Tier** and DECLINE all PAYG offers!
@@ -330,7 +331,7 @@ flowchart TD
 **Required Fields:**
 
 - `OCI_CONFIG`:  Absolute path to the file with OCI API Config Detail content
-- `OCT_FREE_AD`: Availability Domain that's eligible for *Always-Free Tier*. If multiple, separate by commas
+- `OCT_FREE_AD`: Availability Domain that's eligible for *Always-Free Tier*. If multiple, separate by commas. The script automatically implements **Multi-AD Retry Logic**: tries AD-1 → AD-2 → AD-3 sequentially if capacity errors occur
 
 **Optional Fields:**
 - `DISPLAY_NAME`: Name of the Instance
@@ -344,7 +345,7 @@ flowchart TD
 - `OPERATING_SYSTEM`: Exact name of the operating system
 - `OS_VERSION`: Exact version of the operating system
 - `ASSIGN_PUBLIC_IP`: Automatically assign an ephemeral public IP address
-- `BOOT_VOLUME_SIZE`: Size of boot volume in GB, values below 50 will be ignored and default to 50.
+- `BOOT_VOLUME_SIZE`: Size of boot volume in GB, values below 50 will be ignored and default to 50. **Maximum safe limit: 100GB** (within overall 200GB Always-Free storage limit). Values > 100GB will be rejected to prevent PAYG charges.
 - `NOTIFY_EMAIL`: Make it True if you want to get notified and provide email and password
 - `EMAIL`: Only Gmail is allowed, the same email will be used for *FROM* and *TO*
 - `EMAIL_PASSWORD`: If two-factor authentication is set, create an App Password and specify it, not the email password. Direct password will work if no two-factor authentication is configured for the email.
