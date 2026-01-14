@@ -16,7 +16,7 @@ This configuration automates creation of **Oracle Always-Free Tier** instances w
 - **CPU:** 4 OCPU @ Ampere Computing ARM64
 - **Memory:** 24 GB RAM
 - **Storage:** Max 200GB total (default: 50GB)
-- **Regions:** us-ashburn-1 or us-phoenix-1 ONLY
+- **Regions:** ca-toronto-1, us-ashburn-1, or us-phoenix-1
 - **OS:** Canonical Ubuntu 22.04 LTS
 - **Cost:** **$0.00/month guaranteed**
 
@@ -219,23 +219,34 @@ For automated deployment using GitHub Actions:
      OCI_PRIVATE_KEY=-----BEGIN PRIVATE KEY-----
      YOUR_PRIVATE_KEY_CONTENT
      -----END PRIVATE KEY-----
-     OCI_REGION=us-ashburn-1
-     NOTIFY_EMAIL=your-email@gmail.com (optional)
+     OCI_REGION=ca-toronto-1
+     NOTIFY_EMAIL=your-email@gmail.com (optional, for Gmail SMTP notifications)
      EMAIL_PASSWORD=your-app-password (optional)
      DISCORD_WEBHOOK=https://discord.com/api/webhooks/... (optional)
-     ```
 
-3. **Run the workflow**:
-   - Go to the `Actions` tab in your repository
-   - Select "Oracle Cloud VPS Signup" workflow
-   - Click "Run workflow"
-   - Fill in the parameters (instance name, shape, etc.)
-   - Click "Run workflow" to start
+
+3. **Run (or wait for) the workflow**:
+   - The workflow is scheduled to run automatically **4× daily** at **03:00, 09:00, 15:00, 21:00 UTC**
+   - Manual fallback: `Actions` → **Oracle Always-Free VPS Signup (Verified $0.00/month)** → **Run workflow**
+   - On success it:
+     - Creates the `INSTANCE_CREATED` file with instance details
+     - Uploads logs as an artifact
+     - Opens/updates a GitHub issue (which typically triggers GitHub email notifications)
+     - Sets repository variable `OCI_AUTOSTOP=true` so future scheduled runs skip automatically
+
+   To re-enable scheduled attempts: go to `Settings` → `Secrets and variables` → `Actions` → `Variables` and delete `OCI_AUTOSTOP` (or set it to `false`).
 
 4. **Monitor the execution**:
    - The workflow will show real-time logs
    - Check the `instance-details` artifact for results
    - Artifacts include instance details, logs, and SSH keys
+
+### Estimated GitHub Actions Usage
+- Scheduled runs are capped to **~20 minutes per run** (via `MAX_RUNTIME_SECS=1200`).
+- If capacity becomes available quickly (common), total usage is often **~10–20 minutes**.
+- Worst-case upper bound depends on how many scheduled runs happen before success (each run can use up to ~20 minutes).
+
+See **[WORKFLOW_VERIFICATION.md](./WORKFLOW_VERIFICATION.md)** for a step-by-step test/verification checklist.
 
 For CI/CD environments, you can also use the setup script:
 ```bash

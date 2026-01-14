@@ -9,7 +9,7 @@ This guide shows you how to verify that your Oracle Cloud Infrastructure (OCI) i
 ## 📊 What We'll Verify
 
 1. ✅ Instance is using Always-Free shape (`VM.Standard.A1.Flex`)
-2. ✅ Instance is in Always-Free region (`us-ashburn-1` or `us-phoenix-1`)
+2. ✅ Instance is in Always-Free region (`ca-toronto-1`, `us-ashburn-1`, or `us-phoenix-1`)
 3. ✅ Storage is within Always-Free limits (≤200GB)
 4. ✅ No PAYG resources are being used
 5. ✅ Bill shows **$0.00**
@@ -21,7 +21,7 @@ This guide shows you how to verify that your Oracle Cloud Infrastructure (OCI) i
 ### Access OCI Console
 1. Go to **https://cloud.oracle.com**
 2. Sign in to your Oracle account
-3. Verify region (top-right) is **us-ashburn-1** or **us-phoenix-1**
+3. Verify region (top-right) is **ca-toronto-1**, **us-ashburn-1**, or **us-phoenix-1**
 
 ### Check Instance Details
 1. Navigate to **"Compute"** → **"Instances"**
@@ -38,11 +38,11 @@ This guide shows you how to verify that your Oracle Cloud Infrastructure (OCI) i
 *If you see `VM.Standard.E2.1.Micro` (AMD), you need to recreate with correct shape*
 
 #### ✅ **Region and Availability Domain**
-- **Region:** Must be **us-ashburn-1** or **us-phoenix-1**
+- **Region:** Must be **ca-toronto-1**, **us-ashburn-1**, or **us-phoenix-1**
 - **Availability Domain:** Should show AD-1, AD-2, or AD-3
 - **Compartment:** Should be in your Always-Free compartment
 
-*If region is NOT one of these two, you're using PAYG!*
+*If region is NOT one of these, you're using PAYG!*
 
 #### ✅ **Storage Configuration**
 1. In instance details, scroll to **"Boot Volume"** section

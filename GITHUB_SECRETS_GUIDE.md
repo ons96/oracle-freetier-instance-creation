@@ -18,7 +18,7 @@ This guide walks you through setting up GitHub Secrets for the Oracle Always-Fre
 | `OCI_TENANCY_ID` | Tenancy OCID from OCI | `ocid1.tenancy.oc1..xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx` | ✅ Yes |
 | `OCI_FINGERPRINT` | API Key fingerprint | `aa:bb:cc:dd:ee:ff:gg:hh:ii:jj:kk:ll:mm:nn:oo:pp` | ✅ Yes |
 | `OCI_PRIVATE_KEY` | Complete private key (27 lines) | `-----BEGIN PRIVATE KEY-----...` | ✅ Yes |
-| `OCI_REGION` | Always-Free region | `us-ashburn-1` or `us-phoenix-1` | ✅ Yes |
+| `OCI_REGION` | Always-Free region | `ca-toronto-1`, `us-ashburn-1`, or `us-phoenix-1` | ✅ Yes |
 | `DISCORD_WEBHOOK` | Discord notification webhook | `https://discord.com/api/webhooks/...` | ❌ No |
 
 ---
@@ -31,7 +31,7 @@ Before adding secrets, you need to collect information from your Oracle Cloud ac
 
 1. Go to **https://cloud.oracle.com**
 2. Sign in with your Oracle account
-3. Verify you're in **us-ashburn-1** or **us-phoenix-1** (top-right)
+3. Verify you're in an Always-Free eligible region (e.g. **ca-toronto-1**, **us-ashburn-1**, **us-phoenix-1**) (top-right)
 
 ---
 
@@ -337,11 +337,21 @@ Your GitHub Secrets page should show:
 
 Once you've added all secrets:
 
-1. ✅ All 6 secrets present (5 required + 1 optional)
+1. ✅ All **required** secrets present (5 required)
 2. ✅ Private key complete (BEGIN to END)
 3. ✅ Region is Always-Free eligible
 4. ✅ OCI_REGION matches your OCI Console region
 5. ✅ Ready to run GitHub Actions workflow
+
+### 🕒 Scheduling + Auto-stop (after first success)
+- The workflow is scheduled to run **4× daily**.
+- After the first successful instance creation, the workflow sets repository variable **`OCI_AUTOSTOP=true`** and future **scheduled** runs will skip automatically.
+- Manual runs (`workflow_dispatch`) will still work.
+
+To re-enable scheduling: `Settings` → `Secrets and variables` → `Actions` → `Variables` → delete `OCI_AUTOSTOP` (or set it to `false`).
+
+### 📧 Success notification email (via GitHub)
+On success, the workflow opens/updates a GitHub issue assigned to the triggering user. If you have GitHub email notifications enabled, GitHub will email you with the instance details.
 
 **Next Step:** [PREFLIGHT_CHECKLIST.md](./PREFLIGHT_CHECKLIST.md)
 
