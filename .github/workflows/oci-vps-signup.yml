@@ -106,7 +106,7 @@ jobs:
           [DEFAULT]
           user=${OCI_USER_ID}
           fingerprint=${OCI_FINGERPRINT}
-          key_file=~/.oci/oci_private_key.pem
+          key_file=${HOME}/oci_private_key.pem
           tenancy=${OCI_TENANCY_ID}
           region=${OCI_REGION}
           CONFIG_EOF
