@@ -109,6 +109,11 @@ jobs:
             "${HOME}" \
             "${OCI_TENANCY_ID}" \
             "${OCI_REGION}" > ~/.oci/config
+          
+          # Debug: Show config file content (first 3 lines, redacted)
+          echo "=== Config file content ==="
+          head -3 ~/.oci/config || echo "Config file is empty or missing!"
+          echo "=== End config ==="
 
           printf '%s' "$OCI_PRIVATE_KEY" > ~/.oci/oci_private_key.pem
           chmod 600 ~/.oci/oci_private_key.pem
