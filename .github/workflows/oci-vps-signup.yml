@@ -154,6 +154,9 @@ jobs:
 
       - name: Create instance
         env:
+          # Limit runtime to 10 minutes per run to save Actions minutes
+          # The scheduled workflow runs 4x/day anyway
+          MAX_RUNTIME_SECS: 600
           OCI_CONFIG: ${{ env.HOME }}/.oci/config
           OCI_USER_ID: ${{ secrets.OCI_USER_ID }}
           OCI_TENANCY_ID: ${{ secrets.OCI_TENANCY_ID }}
