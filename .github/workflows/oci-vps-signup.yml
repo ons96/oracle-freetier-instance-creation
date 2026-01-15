@@ -103,7 +103,7 @@ jobs:
           echo "OCI_PRIVATE_KEY length: ${#OCI_PRIVATE_KEY}"
 
           # Write config file using printf to avoid heredoc YAML issues
-          printf '[DEFAULT]\nuser=%s\nfingerprint=%s\nkey_file=%s/oci_private_key.pem\ntenancy=%s\nregion=%s\n' \
+          printf '[DEFAULT]\nuser=%s\nfingerprint=%s\nkey_file=%s/.oci/oci_private_key.pem\ntenancy=%s\nregion=%s\n' \
             "${OCI_USER_ID}" \
             "${OCI_FINGERPRINT}" \
             "${HOME}" \
