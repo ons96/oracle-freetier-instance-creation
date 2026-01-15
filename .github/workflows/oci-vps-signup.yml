@@ -103,13 +103,13 @@ jobs:
           echo "OCI_PRIVATE_KEY length: ${#OCI_PRIVATE_KEY}"
 
           cat > ~/.oci/config <<CONFIG_EOF
-          [DEFAULT]
-          user=${OCI_USER_ID}
-          fingerprint=${OCI_FINGERPRINT}
-          key_file=${HOME}/oci_private_key.pem
-          tenancy=${OCI_TENANCY_ID}
-          region=${OCI_REGION}
-          CONFIG_EOF
+[DEFAULT]
+user=${OCI_USER_ID}
+fingerprint=${OCI_FINGERPRINT}
+key_file=${HOME}/oci_private_key.pem
+tenancy=${OCI_TENANCY_ID}
+region=${OCI_REGION}
+CONFIG_EOF
 
           printf '%s' "$OCI_PRIVATE_KEY" > ~/.oci/oci_private_key.pem
           chmod 600 ~/.oci/oci_private_key.pem
