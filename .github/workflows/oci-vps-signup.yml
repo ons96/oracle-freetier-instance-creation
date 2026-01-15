@@ -150,7 +150,6 @@ jobs:
 
       - name: Create instance
         env:
-          OCI_CONFIG: $HOME/.oci/config
           OCI_USER_ID: ${{ secrets.OCI_USER_ID }}
           OCI_TENANCY_ID: ${{ secrets.OCI_TENANCY_ID }}
           OCI_FINGERPRINT: ${{ secrets.OCI_FINGERPRINT }}
@@ -171,6 +170,9 @@ jobs:
 
           echo "Starting instance creation..."
           echo "AD: ${OCT_FREE_AD} | Boot: ${BOOT_VOLUME_SIZE}GB | Region: ${OCI_REGION}"
+
+          # Expand $HOME in path (environment variables don't expand in GitHub Actions)
+          OCI_CONFIG="${HOME}/.oci/config"
 
           if [ ! -f "${OCI_CONFIG}" ]; then
             echo "OCI config file not found at: ${OCI_CONFIG}"
