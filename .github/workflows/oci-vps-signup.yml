@@ -150,7 +150,7 @@ jobs:
 
       - name: Create instance
         env:
-          OCI_CONFIG: ~/.oci/config
+          OCI_CONFIG: $HOME/.oci/config
           OCI_USER_ID: ${{ secrets.OCI_USER_ID }}
           OCI_TENANCY_ID: ${{ secrets.OCI_TENANCY_ID }}
           OCI_FINGERPRINT: ${{ secrets.OCI_FINGERPRINT }}
