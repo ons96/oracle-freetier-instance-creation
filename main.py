@@ -520,8 +520,10 @@ def launch_instance() -> bool:
     validate_always_free_compliance()
     
     # Step 1 - Get TENANCY
-    user_info = execute_oci_command(iam_client, "get_user", OCI_USER_ID)
-    oci_tenancy = user_info.compartment_id
+    # user_info = execute_oci_command(iam_client, "get_user", OCI_USER_ID)
+    # oci_tenancy = user_info.compartment_id
+    # FIX: Bypass permission issues by using tenancy ID from config directly
+    oci_tenancy = config["tenancy"]
     logging.info("OCI_TENANCY: %s", oci_tenancy)
 
     # Step 2 - Get AD Name with Multi-AD Retry Logic
