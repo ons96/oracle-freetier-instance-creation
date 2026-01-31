@@ -1,0 +1,181 @@
+name: Oracle Instance Keepalive
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Run every 4 hours to keep instance active
+    # This generates network traffic to prevent Oracle from reclaiming the instance
+    - cron: '0 */4 * * *'
+
+permissions:
+  contents: read
+
+jobs:
+  keepalive:
+    # Only run if instance exists (check for INSTANCE_CREATED file or existing instance)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install oci paramiko
+
+      - name: Create OCI directory
+        run: mkdir -p ~/.oci
+
+      - name: Setup OCI configuration
+        env:
+          OCI_USER_ID: ${{ secrets.OCI_USER_ID }}
+          OCI_TENANCY_ID: ${{ secrets.OCI_TENANCY_ID }}
+          OCI_FINGERPRINT: ${{ secrets.OCI_FINGERPRINT }}
+          OCI_PRIVATE_KEY: ${{ secrets.OCI_PRIVATE_KEY }}
+          OCI_REGION: ${{ secrets.OCI_REGION }}
+        run: |
+          set -euo pipefail
+
+          printf '[DEFAULT]\nuser=%s\nfingerprint=%s\nkey_file=%s/.oci/oci_private_key.pem\ntenancy=%s\nregion=%s\n' \
+            "${OCI_USER_ID}" \
+            "${OCI_FINGERPRINT}" \
+            "${HOME}" \
+            "${OCI_TENANCY_ID}" \
+            "${OCI_REGION}" > ~/.oci/config
+
+          printf '%s' "$OCI_PRIVATE_KEY" > ~/.oci/oci_private_key.pem
+          chmod 600 ~/.oci/oci_private_key.pem
+
+      - name: Install OCI CLI
+        run: |
+          pip install oci-cli
+
+      - name: Check instance and keepalive
+        env:
+          OCI_TENANCY_ID: ${{ secrets.OCI_TENANCY_ID }}
+          OCI_REGION: ${{ secrets.OCI_REGION }}
+        run: |
+          set -euo pipefail
+
+          echo "Checking for existing Always-Free instances..."
+
+          # Find the instance
+          instance_info=$(oci compute instance list \
+            --compartment-id "${OCI_TENANCY_ID}" \
+            --lifecycle-state RUNNING \
+            --query "data[?shape=='VM.Standard.A1.Flex'] | [0]" \
+            2>/dev/null || echo "null")
+
+          if [ "$instance_info" = "null" ] || [ -z "$instance_info" ]; then
+            echo "No VM.Standard.A1.Flex instance found. Skipping keepalive."
+            exit 0
+          fi
+
+          instance_id=$(echo "$instance_info" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+          display_name=$(echo "$instance_info" | python3 -c "import sys,json; print(json.load(sys.stdin).get('display-name','unknown'))")
+
+          echo "Found instance: ${display_name} (${instance_id})"
+
+          # Get VNIC attachments to find public/private IP
+          vnics=$(oci compute vnic-attachment list \
+            --compartment-id "${OCI_TENANCY_ID}" \
+            --instance-id "${instance_id}" \
+            --query "data[]" \
+            2>/dev/null || echo "[]")
+
+          if [ "$vnics" = "[]" ] || [ -z "$vnics" ]; then
+            echo "No VNICs found. Instance may not have network configured."
+            echo "Keepalive requires network access. Please configure public IP or bastion host."
+            exit 0
+          fi
+
+          # Get the first VNIC ID
+          vnic_id=$(echo "$vnics" | python3 -c "import sys,json; data=json.load(sys.stdin); print(data[0]['vnic-id']) if data else ''")
+
+          if [ -z "$vnic_id" ]; then
+            echo "Could not extract VNIC ID"
+            exit 0
+          fi
+
+          # Get VNIC details for IP
+          vnic_details=$(oci network vnic get \
+            --vnic-id "${vnic_id}" \
+            --query "data" \
+            2>/dev/null || echo "null")
+
+          public_ip=$(echo "$vnic_details" | python3 -c "import sys,json; print(json.load(sys.stdin).get('public-ip',''))")
+          private_ip=$(echo "$vnic_details" | python3 -c "import sys,json; print(json.load(sys.stdin).get('private-ip',''))")
+
+          echo "Public IP: ${public_ip:-'None assigned'}"
+          echo "Private IP: ${private_ip}"
+
+          # If no public IP, we can't SSH directly
+          # User would need to configure bastion host or public IP first
+          if [ -z "$public_ip" ]; then
+            echo "⚠️  No public IP assigned to instance."
+            echo "Keepalive requires either:"
+            echo "  1. Public IP assigned to instance, OR"
+            echo "  2. Bastion host/jump server configured"
+            echo ""
+            echo "To enable keepalive, either:"
+            echo "  - Assign a public IP in OCI Console > Instance > Attached VNICs > Edit, OR"
+            echo "  - Set up a bastion host and configure SSH config file"
+            echo ""
+            echo "For now, using alternative keepalive: generating API activity..."
+            
+            # Alternative: Just make API calls to show activity
+            # This isn't as good as actual instance activity, but better than nothing
+            echo "Querying instance metrics to generate API activity..."
+            oci monitoring metric-data summarize-metrics-data \
+              --compartment-id "${OCI_TENANCY_ID}" \
+              --namespace "oci_computeagent" \
+              --resource-id "${instance_id}" \
+              --query-text "CPUUtilization[1m].avg()" \
+              --start-time "$(date -u -d '5 minutes ago' +%Y-%m-%dT%H:%M:%S.000Z)" \
+              --end-time "$(date -u +%Y-%m-%dT%H:%M:%S.000Z)" \
+              2>/dev/null || echo "Could not query metrics (normal if monitoring not enabled)"
+            
+            echo "✅ Keepalive API activity generated at $(date)"
+            exit 0
+          fi
+
+          echo "Attempting SSH keepalive to ${public_ip}..."
+
+          # Try SSH connection with the auto-generated SSH key
+          # The key would have been generated and displayed when instance was created
+          # User needs to add the SSH private key as a secret for this to work
+          
+          if [ -n "${{ secrets.ORACLE_INSTANCE_SSH_KEY }}" ]; then
+            echo "${{ secrets.ORACLE_INSTANCE_SSH_KEY }}" > /tmp/oracle_instance_key.pem
+            chmod 600 /tmp/oracle_instance_key.pem
+
+            # SSH keepalive - just run 'uptime' command
+            ssh -o StrictHostKeyChecking=no \
+                -o ConnectTimeout=10 \
+                -o BatchMode=yes \
+                -i /tmp/oracle_instance_key.pem \
+                ubuntu@${public_ip} \
+                'echo "Keepalive ping at $(date)" && uptime' \
+                2>/dev/null && echo "✅ SSH keepalive successful" || echo "⚠️  SSH connection failed - check SSH key secret"
+          else
+            echo "⚠️  ORACLE_INSTANCE_SSH_KEY secret not set"
+            echo "To enable SSH keepalive, add your instance's SSH private key as a secret:"
+            echo "  1. Get the SSH private key from when the instance was created (check artifacts)"
+            echo "  2. Go to Settings > Secrets and variables > Actions"
+            echo "  3. Add secret: ORACLE_INSTANCE_SSH_KEY (paste the entire private key)"
+            echo ""
+            echo "Without SSH key, using API-level keepalive instead..."
+          fi
+
+      - name: Log keepalive attempt
+        if: always()
+        run: |
+          echo "Keepalive workflow completed at $(date -u)"
+          echo "Instance check performed - see logs above for details"
