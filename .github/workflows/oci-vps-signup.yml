@@ -6,12 +6,13 @@ on:
       availability_domain:
         description: 'Availability Domain'
         required: false
-        default: 'AD-1'
+        default: 'AD-1,AD-2,AD-3'
         type: choice
         options:
           - AD-1
           - AD-2
           - AD-3
+          - AD-1,AD-2,AD-3
       boot_volume_size:
         description: 'Boot volume size (Max 50GB for safety, default 50)'
         required: false
@@ -23,10 +24,9 @@ on:
         default: 'github-actions-ampere-instance'
         type: string
   schedule:
-    - cron: '0 3 * * *' # 3 AM UTC
-    - cron: '0 9 * * *' # 9 AM UTC
-    - cron: '0 15 * * *' # 3 PM UTC
-    - cron: '0 21 * * *' # 9 PM UTC
+    # Run every 6 hours for 24/7 continuous coverage
+    # This maximizes chances of catching capacity when it becomes available
+    - cron: '0 */6 * * *' # Every 6 hours at 00:00, 06:00, 12:00, 18:00 UTC
 
 permissions:
   contents: read
@@ -35,9 +35,10 @@ permissions:
 
 jobs:
   oracle-signup:
-    if: ${{ github.event_name != 'schedule' || vars.OCI_AUTOSTOP != 'true' }}
+    # Run continuously even after instance creation for daily reminders
+    # This ensures you get notified if you miss the first success notification
     runs-on: ubuntu-latest
-    timeout-minutes: 350
+    timeout-minutes: 360
 
     steps:
       - name: Verify All Required Secrets
@@ -81,6 +82,11 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+
+      - name: Install OCI CLI
+        run: |
+          pip install oci-cli
+          echo "OCI CLI installed for instance checking"
 
       - name: Create OCI directory
         run: mkdir -p ~/.oci
@@ -152,18 +158,59 @@ jobs:
 
           echo "Boot volume size valid: ${boot_size}GB"
 
-      - name: Create instance
+      - name: Check for existing instance
+        id: check_instance
         env:
-          # Limit runtime to 10 minutes per run to save Actions minutes
-          # The scheduled workflow runs 4x/day anyway
-          MAX_RUNTIME_SECS: 600
           OCI_CONFIG: ${{ env.HOME }}/.oci/config
           OCI_USER_ID: ${{ secrets.OCI_USER_ID }}
           OCI_TENANCY_ID: ${{ secrets.OCI_TENANCY_ID }}
           OCI_FINGERPRINT: ${{ secrets.OCI_FINGERPRINT }}
           OCI_PRIVATE_KEY: ${{ secrets.OCI_PRIVATE_KEY }}
           OCI_REGION: ${{ secrets.OCI_REGION }}
-          OCT_FREE_AD: ${{ github.event.inputs.availability_domain || 'AD-1' }}
+        run: |
+          set -euo pipefail
+
+          # Expand $HOME in path
+          OCI_CONFIG="${HOME}/.oci/config"
+
+          echo "Checking for existing Always-Free instances..."
+
+          # Query OCI for existing VM.Standard.A1.Flex instances
+          existing_instances=$(oci compute instance list \
+            --compartment-id "${OCI_TENANCY_ID}" \
+            --lifecycle-state RUNNING \
+            --query "data[?shape=='VM.Standard.A1.Flex'] | length(@)" \
+            2>/dev/null || echo "0")
+
+          if [ "${existing_instances:-0}" -gt 0 ]; then
+            echo "instance_exists=true" >> $GITHUB_OUTPUT
+            echo "Found ${existing_instances} existing VM.Standard.A1.Flex instance(s)"
+            
+            # Get instance details for the reminder
+            oci compute instance list \
+              --compartment-id "${OCI_TENANCY_ID}" \
+              --lifecycle-state RUNNING \
+              --query "data[?shape=='VM.Standard.A1.Flex'].{id:id, displayName:display-name, ad:availability-domain, timeCreated:time-created} | [0]" \
+              > INSTANCE_CREATED 2>/dev/null || true
+          else
+            echo "instance_exists=false" >> $GITHUB_OUTPUT
+            echo "No existing VM.Standard.A1.Flex instances found"
+          fi
+
+      - name: Create instance
+        if: steps.check_instance.outputs.instance_exists != 'true'
+        env:
+          # Run for almost 6 hours (GitHub Actions max is 6 hours = 21600 seconds)
+          # This maximizes retry time for catching capacity
+          MAX_RUNTIME_SECS: 21500
+          OCI_CONFIG: ${{ env.HOME }}/.oci/config
+          OCI_USER_ID: ${{ secrets.OCI_USER_ID }}
+          OCI_TENANCY_ID: ${{ secrets.OCI_TENANCY_ID }}
+          OCI_FINGERPRINT: ${{ secrets.OCI_FINGERPRINT }}
+          OCI_PRIVATE_KEY: ${{ secrets.OCI_PRIVATE_KEY }}
+          OCI_REGION: ${{ secrets.OCI_REGION }}
+          # Use all 3 ADs for maximum capacity checking
+          OCT_FREE_AD: ${{ github.event.inputs.availability_domain || 'AD-1,AD-2,AD-3' }}
           DISPLAY_NAME: ${{ github.event.inputs.instance_name || 'github-actions-ampere-instance' }}
           OCI_COMPUTE_SHAPE: VM.Standard.A1.Flex
           BOOT_VOLUME_SIZE: ${{ github.event.inputs.boot_volume_size || '50' }}
@@ -171,6 +218,8 @@ jobs:
           OS_VERSION: '22.04'
           ASSIGN_PUBLIC_IP: 'false'
           SECOND_MICRO_INSTANCE: 'false'
+          # Retry every 10 seconds (safe for Oracle API limits)
+          REQUEST_WAIT_TIME_SECS: '10'
           CI: 'true'
           GITHUB_ACTIONS: 'true'
         run: |
@@ -219,13 +268,14 @@ jobs:
             echo "Instance creation failed"
           fi
 
-      - name: Auto-stop on success
+      - name: Daily reminder & instance tracking
         if: hashFiles('INSTANCE_CREATED') != ''
         uses: actions/github-script@v7
         with:
           script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;
+            const fs = require('fs');
 
             async function upsertRepoVariable(name, value) {
               try {
@@ -249,14 +299,74 @@ jobs:
               }
             }
 
-            await upsertRepoVariable('OCI_AUTOSTOP', 'true');
+            async function getRepoVariable(name) {
+              try {
+                const { data } = await github.request('GET /repos/{owner}/{repo}/actions/variables/{name}', {
+                  owner,
+                  repo,
+                  name,
+                });
+                return data.value;
+              } catch (e) {
+                if (e.status === 404) {
+                  return null;
+                }
+                throw e;
+              }
+            }
 
-            const fs = require('fs');
             const details = fs.readFileSync('INSTANCE_CREATED', 'utf8');
-            await github.rest.issues.create({
-              owner,
-              repo,
-              title: '✅ Oracle Always-Free VPS Created',
-              body: `Instance has been successfully created!\n\n\`\`\`\n${details}\n\`\`\`\n\nScheduled runs have been auto-disabled by setting repository variable OCI_AUTOSTOP=true.`,
-              assignees: [context.actor],
-            });
+            const today = new Date().toISOString().split('T')[0];
+            const lastReminderDate = await getRepoVariable('LAST_REMINDER_DATE');
+
+            // Only send reminder once per day
+            if (lastReminderDate !== today) {
+              console.log(`Sending daily reminder for ${today}...`);
+
+              const issueTitle = `📧 Daily Reminder: Oracle Instance Active (${today})`;
+              const issueBody = `Your Oracle Always-Free VPS is still active and running.\n\n\`\`\`\n${details}\n\`\`\`\n\n*This is an automated daily reminder. Disable the workflow in Actions tab when you're ready to stop receiving these.*`;
+
+              try {
+                // Search for existing daily reminder issue
+                const { data: issues } = await github.rest.issues.listForRepo({
+                  owner,
+                  repo,
+                  state: 'open',
+                  labels: 'daily-reminder',
+                  per_page: 1,
+                });
+
+                if (issues.length > 0) {
+                  // Update existing reminder issue
+                  await github.rest.issues.update({
+                    owner,
+                    repo,
+                    issue_number: issues[0].number,
+                    title: issueTitle,
+                    body: issueBody,
+                  });
+                  console.log(`Updated reminder issue #${issues[0].number}`);
+                } else {
+                  // Create new reminder issue with success notification
+                  const { data: newIssue } = await github.rest.issues.create({
+                    owner,
+                    repo,
+                    title: `✅ Oracle Always-Free VPS Created + Daily Reminder (${today})`,
+                    body: `🎉 **Instance successfully created!**\n\n\`\`\`\n${details}\n\`\`\`\n\n*This issue will be updated daily as a reminder. Disable the workflow in Actions tab when ready.*`,
+                    labels: ['daily-reminder'],
+                    assignees: [context.actor],
+                  });
+                  console.log(`Created success notification + reminder issue #${newIssue.number}`);
+                }
+              } catch (e) {
+                console.log('Note: Could not create/update issue:', e.message);
+              }
+
+              // Update the last reminder date
+              await upsertRepoVariable('LAST_REMINDER_DATE', today);
+              console.log(`Updated LAST_REMINDER_DATE to ${today}`);
+            } else {
+              console.log(`Reminder already sent for ${today}. Skipping...`);
+            }
+
+            console.log('Note: Workflow continues running for daily reminders. Disable manually in Actions tab when ready.');
