@@ -199,9 +199,8 @@ jobs:
 
       - name: Create instance
         if: steps.check_instance.outputs.instance_exists != 'true'
+        id: create_instance
         env:
-          # Run for almost 6 hours (GitHub Actions max is 6 hours = 21600 seconds)
-          # This maximizes retry time for catching capacity
           MAX_RUNTIME_SECS: 21500
           OCI_CONFIG: ${{ env.HOME }}/.oci/config
           OCI_USER_ID: ${{ secrets.OCI_USER_ID }}
@@ -209,7 +208,6 @@ jobs:
           OCI_FINGERPRINT: ${{ secrets.OCI_FINGERPRINT }}
           OCI_PRIVATE_KEY: ${{ secrets.OCI_PRIVATE_KEY }}
           OCI_REGION: ${{ secrets.OCI_REGION }}
-          # Use all 3 ADs for maximum capacity checking
           OCT_FREE_AD: ${{ github.event.inputs.availability_domain || 'AD-1,AD-2,AD-3' }}
           DISPLAY_NAME: ${{ github.event.inputs.instance_name || 'github-actions-ampere-instance' }}
           OCI_COMPUTE_SHAPE: VM.Standard.A1.Flex
@@ -218,25 +216,47 @@ jobs:
           OS_VERSION: '22.04'
           ASSIGN_PUBLIC_IP: 'false'
           SECOND_MICRO_INSTANCE: 'false'
-          # Retry every 10 seconds (safe for Oracle API limits)
           REQUEST_WAIT_TIME_SECS: '10'
           CI: 'true'
           GITHUB_ACTIONS: 'true'
         run: |
-          set -euo pipefail
+          set -uo pipefail
 
           echo "Starting instance creation..."
           echo "AD: ${OCT_FREE_AD} | Boot: ${BOOT_VOLUME_SIZE}GB | Region: ${OCI_REGION}"
+          echo "Max runtime: ~6 hours | Retry interval: 10 seconds"
+          echo "Attempting all ADs: ${OCT_FREE_AD}"
 
-          # Expand $HOME in path (environment variables don't expand in GitHub Actions)
           OCI_CONFIG="${HOME}/.oci/config"
 
           if [ ! -f "${OCI_CONFIG}" ]; then
-            echo "OCI config file not found at: ${OCI_CONFIG}"
+            echo "ERROR: OCI config file not found at: ${OCI_CONFIG}"
             exit 1
           fi
 
+          # Run Python script and capture exit code
+          # Don't use set -e so we can handle exit codes gracefully
           python main.py
+          EXIT_CODE=$?
+          
+          echo "Script exit code: ${EXIT_CODE}"
+          
+          # Check what happened
+          if [ -f INSTANCE_CREATED ]; then
+            echo "SUCCESS: Instance was created!"
+            exit 0
+          elif [ -f MAX_RUNTIME_REACHED ]; then
+            echo "INFO: Max runtime reached without finding capacity - this is expected"
+            echo "The script ran successfully but Oracle has no available capacity"
+            echo "Next scheduled run will try again automatically"
+            exit 0  # Don't fail - this is expected behavior
+          elif [ -f UNHANDLED_ERROR.log ] || [ -f ERROR_IN_CONFIG.log ]; then
+            echo "ERROR: Script encountered an error"
+            exit 1  # Only fail on actual errors
+          else
+            echo "WARNING: Unexpected exit state"
+            exit 1
+          fi
 
       - name: Upload logs
         if: always()
