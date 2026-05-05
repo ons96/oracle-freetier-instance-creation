@@ -214,7 +214,7 @@ jobs:
           BOOT_VOLUME_SIZE: ${{ github.event.inputs.boot_volume_size || '50' }}
           OPERATING_SYSTEM: Canonical Ubuntu
           OS_VERSION: '22.04'
-          ASSIGN_PUBLIC_IP: 'false'
+          ASSIGN_PUBLIC_IP: 'true'
           SECOND_MICRO_INSTANCE: 'false'
           REQUEST_WAIT_TIME_SECS: '10'
           CI: 'true'
@@ -286,6 +286,27 @@ jobs:
             cat MAX_RUNTIME_REACHED
           else
             echo "Instance creation failed"
+          fi
+
+      - name: Discord notification
+        if: always()
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          if [ -z "${DISCORD_WEBHOOK_URL}" ]; then
+            echo "No Discord webhook configured, skipping notification"
+            exit 0
+          fi
+          if [ -f INSTANCE_CREATED ]; then
+            MESSAGE=":tada: **Oracle VPS Claimed!** \nInstance has been created with cloud-init keepalive (stress-ng cron every 5 min). \nCheck OCI console and connect via SSH within 7 days. \n\`\`\`\n$(head -5 INSTANCE_CREATED)\n\`\`\`"
+            curl -s -H "Content-Type: application/json" -X POST -d "{\"content\":\"${MESSAGE}\"}" "${DISCORD_WEBHOOK_URL}"
+            echo "Discord success notification sent"
+          elif [ -f MAX_RUNTIME_REACHED ]; then
+            echo "No capacity yet - skipping Discord notification (quiet mode)"
+          else
+            MESSAGE=":warning: **Oracle VPS Script Error** \nThe signup script hit an unexpected error. Check Actions logs: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            curl -s -H "Content-Type: application/json" -X POST -d "{\"content\":\"${MESSAGE}\"}" "${DISCORD_WEBHOOK_URL}"
+            echo "Discord error notification sent"
           fi
 
       - name: Daily reminder & instance tracking

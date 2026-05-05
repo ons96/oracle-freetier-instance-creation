@@ -6,6 +6,7 @@ import os
 import smtplib
 import sys
 import time
+import base64
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
@@ -18,6 +19,15 @@ import requests
 
 # Load environment variables from .env file
 load_dotenv(os.path.join(os.getcwd(), 'oci.env'))
+
+KEEPALIVE_CLOUD_INIT = """#!/bin/bash
+set -euo pipefail
+apt-get update -qq && apt-get install -y -qq stress-ng cron
+echo '*/5 * * * * root stress-ng -c 4 -t 60 --cpu-load 20' > /etc/cron.d/oci-keepalive
+echo '0 */12 * * * root curl -sf https://cloud.oracle.com > /dev/null 2>&1' >> /etc/cron.d/oci-keepalive
+systemctl enable cron
+echo "keepalive installed $(date)" > /var/log/oci-keepalive-init.log
+"""
 
 ARM_SHAPE = "VM.Standard.A1.Flex"
 E2_MICRO_SHAPE = "VM.Standard.E2.1.Micro"
@@ -670,7 +680,8 @@ def launch_instance() -> bool:
                         boot_volume_size_in_gbs=boot_volume_size,
                     ),
                     metadata={
-                        "ssh_authorized_keys": ssh_public_key},
+                        "ssh_authorized_keys": ssh_public_key,
+                        "user_data": base64.b64encode(KEEPALIVE_CLOUD_INIT.encode()).decode()},
                 )
             )
             if launch_instance_response.status == 200:
