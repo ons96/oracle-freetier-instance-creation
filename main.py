@@ -23,7 +23,7 @@ load_dotenv(os.path.join(os.getcwd(), 'oci.env'))
 KEEPALIVE_CLOUD_INIT = """#!/bin/bash
 set -euo pipefail
 apt-get update -qq && apt-get install -y -qq stress-ng cron
-echo '*/5 * * * * root stress-ng -c 4 -t 60 --cpu-load 20' > /etc/cron.d/oci-keepalive
+echo '*/5 * * * * root stress-ng -c $(nproc) -t 60 --cpu-load 20' > /etc/cron.d/oci-keepalive
 echo '0 */12 * * * root curl -sf https://cloud.oracle.com > /dev/null 2>&1' >> /etc/cron.d/oci-keepalive
 systemctl enable cron
 echo "keepalive installed $(date)" > /var/log/oci-keepalive-init.log
@@ -40,6 +40,13 @@ ALWAYS_FREE_REGIONS = ["us-ashburn-1", "us-phoenix-1", "ca-toronto-1"]
 ALWAYS_FREE_OPERATING_SYSTEMS = ["Canonical Ubuntu"]
 ALWAYS_FREE_MAX_STORAGE_GB = 200
 ALWAYS_FREE_DEFAULT_BOOT_VOLUME = 50
+# Oracle halved the Always Free Ampere A1 allowance in 2026: the ceiling is now
+# 2 OCPU / 12 GB per tenancy (1,500 OCPU-hours + 9,000 GB-hours per month).
+# Requesting the old 4 OCPU / 24 GB can never succeed on an Always Free account
+# and silently becomes billable on a PAYG account.
+ALWAYS_FREE_MAX_A1_OCPUS = 2
+ALWAYS_FREE_MAX_A1_MEMORY_GB = 12
+ALWAYS_FREE_MAX_A1_MEMORY_PER_OCPU = 6
 
 # Validate required environment variables for CI/CD
 required_vars = ['OCI_CONFIG']
@@ -78,6 +85,11 @@ OPERATING_SYSTEM = os.getenv("OPERATING_SYSTEM", "").strip()
 OS_VERSION = os.getenv("OS_VERSION", "").strip()
 ASSIGN_PUBLIC_IP = os.getenv("ASSIGN_PUBLIC_IP", "false").strip()
 BOOT_VOLUME_SIZE = os.getenv("BOOT_VOLUME_SIZE", "50").strip()
+# 1 OCPU / 6 GB is still fully Always Free (750 h x 1 = 750 of 1,500 OCPU-hours,
+# 750 h x 6 = 4,500 of 9,000 GB-hours) and fits residual capacity far more often
+# than a 2 OCPU / 12 GB request.
+ARM_OCPUS = int(os.getenv("OCI_OCPUS", "1").strip() or "1")
+ARM_MEMORY_GB = int(os.getenv("OCI_MEMORY_GB", "6").strip() or "6")
 NOTIFY_EMAIL = os.getenv("NOTIFY_EMAIL", 'False').strip().lower() == 'true'
 EMAIL = os.getenv("EMAIL", "").strip()
 EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD", "").strip()
@@ -132,7 +144,7 @@ def validate_always_free_compliance():
     if OCI_COMPUTE_SHAPE not in ALWAYS_FREE_SHAPES:
         errors.append(
             f"🚨 CRITICAL: Shape '{OCI_COMPUTE_SHAPE}' is NOT Always-Free eligible.\n"
-            f"   REQUIRED: VM.Standard.A1.Flex (Ampere ARM, 4 OCPU, 24GB RAM)\n"
+            f"   REQUIRED: VM.Standard.A1.Flex (Ampere ARM, max 2 OCPU, 12GB RAM)\n"
             f"   Using any other shape WILL incur PAYG charges!\n"
             f"\n   Did you accidentally select E2.Micro? This can trigger charges!"
         )
@@ -145,6 +157,25 @@ def validate_always_free_compliance():
             f"   Using other regions WILL incur PAYG charges!"
         )
     
+    if OCI_COMPUTE_SHAPE == ARM_SHAPE:
+        if ARM_OCPUS < 1 or ARM_MEMORY_GB < 1:
+            errors.append(
+                f"🚨 CRITICAL: Requested {ARM_OCPUS} OCPU / {ARM_MEMORY_GB}GB is not a valid A1 shape.\n"
+                f"   Set OCI_OCPUS and OCI_MEMORY_GB to positive values."
+            )
+        if ARM_OCPUS > ALWAYS_FREE_MAX_A1_OCPUS or ARM_MEMORY_GB > ALWAYS_FREE_MAX_A1_MEMORY_GB:
+            errors.append(
+                f"🚨 CRITICAL: Requested {ARM_OCPUS} OCPU / {ARM_MEMORY_GB}GB exceeds the Always Free A1 "
+                f"allocation of {ALWAYS_FREE_MAX_A1_OCPUS} OCPU / {ALWAYS_FREE_MAX_A1_MEMORY_GB}GB.\n"
+                f"   This request either fails with 'out of host capacity' forever (Always Free) or is billed "
+                f"(PAYG). Use OCI_OCPUS=1, OCI_MEMORY_GB=6 for the best capacity odds."
+            )
+        if ARM_MEMORY_GB > ARM_OCPUS * ALWAYS_FREE_MAX_A1_MEMORY_PER_OCPU:
+            errors.append(
+                f"🚨 CRITICAL: {ARM_MEMORY_GB}GB is above the A1 maximum of "
+                f"{ARM_OCPUS * ALWAYS_FREE_MAX_A1_MEMORY_PER_OCPU}GB for {ARM_OCPUS} OCPU(s)."
+            )
+
     boot_volume_int = int(BOOT_VOLUME_SIZE) if str(BOOT_VOLUME_SIZE).isdigit() else 0
     if boot_volume_int > ALWAYS_FREE_MAX_STORAGE_GB:
         errors.append(
@@ -628,7 +659,7 @@ def launch_instance() -> bool:
     instance_exist_flag = check_instance_state_and_write(oci_tenancy, OCI_COMPUTE_SHAPE, tries=1)
 
     if OCI_COMPUTE_SHAPE == "VM.Standard.A1.Flex":
-        shape_config = oci.core.models.LaunchInstanceShapeConfigDetails(ocpus=4, memory_in_gbs=24)
+        shape_config = oci.core.models.LaunchInstanceShapeConfigDetails(ocpus=ARM_OCPUS, memory_in_gbs=ARM_MEMORY_GB)
     else:
         shape_config = oci.core.models.LaunchInstanceShapeConfigDetails(ocpus=1, memory_in_gbs=1)
 

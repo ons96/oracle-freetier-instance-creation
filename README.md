@@ -13,8 +13,9 @@ This configuration automates creation of **Oracle Always-Free Tier** instances w
 
 ### ✅ Verified Always-Free Configuration
 - **Shape:** VM.Standard.A1.Flex (Ampere ARM)
-- **CPU:** 4 OCPU @ Ampere Computing ARM64
-- **Memory:** 24 GB RAM
+- **CPU:** 1 OCPU @ Ampere Computing ARM64 (configurable, max 2)
+- **Memory:** 6 GB RAM (configurable, max 12)
+- **Note:** Oracle halved the Always Free A1 allowance to 2 OCPU / 12 GB in 2026. The old 4 OCPU / 24 GB request can never succeed on an Always Free account. Set `OCI_OCPUS` / `OCI_MEMORY_GB` if you want 2/12 instead of the 1/6 default.
 - **Storage:** Max 200GB total (default: 50GB, safe limit: 100GB)
 - **Regions:** ca-toronto-1, us-ashburn-1, or us-phoenix-1
 - **OS:** Canonical Ubuntu 22.04 LTS
@@ -90,8 +91,8 @@ Features:
 🎯 ALWAYS-FREE TIER CONFIGURATION VALIDATION
 ================================================
 ✅ Compute Shape: VM.Standard.A1.Flex (Ampere ARM CPU)
-✅ OCPU: 4 cores @ Ampere Computing ARM64
-✅ Memory: 24 GB RAM
+✅ OCPU: 1 core @ Ampere Computing ARM64 (Always Free)
+✅ Memory: 6 GB RAM (Always Free)
 ✅ Region: us-ashburn-1 (Always-Free eligible)
 ✅ Boot Volume: 50GB (within 200GB Always-Free limit)
 ✅ Operating System: Canonical Ubuntu
@@ -104,7 +105,7 @@ Features:
 
 ```
 🚨 CRITICAL: Shape 'VM.Standard.E2.1.Micro' is NOT Always-Free eligible.
-   REQUIRED: VM.Standard.A1.Flex (Ampere ARM, 4 OCPU, 24GB RAM)
+   REQUIRED: VM.Standard.A1.Flex (Ampere ARM, max 2 OCPU, 12GB RAM)
    Using any other shape WILL incur PAYG charges!
 
 ❌ Always-Free Compliance Check FAILED!
@@ -127,7 +128,7 @@ This isn't Intel or AMD - it's **Ampere Computing ARM64**, which Oracle owns a s
 - Excellent Linux compatibility
 - Lower power consumption
 - Cloud-optimized performance
-- **Why you get 4 OCPU + 24GB for free**
+- **Why you get A1 capacity for free (2 OCPU / 12 GB monthly allowance)**
 
 ### Real-World Performance
 
