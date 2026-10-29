@@ -55,7 +55,7 @@ Before adding secrets, you need to collect information from your Oracle Cloud ac
 
 The User OCID looks like:
 ```
-ocid1.user.oc1..aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+ocid1.user.oc1..<your-user-ocid>
 ```
 
 **Save this in a text file temporarily** - you'll need it soon.
@@ -73,7 +73,7 @@ ocid1.user.oc1..aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
 The Tenancy OCID looks like:
 ```
-ocid1.tenancy.oc1..aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+ocid1.tenancy.oc1..<your-tenancy-ocid>
 ```
 
 **Save this with your User OCID.**
